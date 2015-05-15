@@ -21,62 +21,76 @@
  ******************************************************************************/
 Var* index2varp(unsigned long i, SatState* sat_state) {
 
-  // ... TO DO ..
-  
-  return NULL; // dummy valued
+  if( sat_state != NULL && i > 0 && i <= sat_state->variables_length )
+    return sat_state->variables[ i - 1 ];
+  return NULL;
 }
 
 
 /******************************************************************************
  * Given a variable var, you should return
- * --its positive literal (pos_literal) 
- * --its negative literal (neg_literal) 
+ * --its positive literal (pos_literal)
+ * --its negative literal (neg_literal)
  *
  *
- * Given a literal lit, set_literal(lit) should return 
+ * Given a literal lit, set_literal(lit) should return
  * --1 if lit is set in the current setting
- * --0 if lit is free 
+ * --0 if lit is free
  *
  * Note a literal is set either by a decision or implication
  * Do not forget to update the status of literals when you run unit resolution
  ******************************************************************************/
 Lit* pos_literal(Var* var) {
 
-  // ... TO DO ..
-  
-  return NULL; // dummy value
+  if( var != NULL )
+    return var->pos_literal;
+  return NULL;
 }
 
 Lit* neg_literal(Var* var) {
 
-  // ... TO DO ..
-  
-  return NULL; // dummy value
+  if( var != NULL )
+    return var->neg_literal;
+  return NULL;
 }
 
 BOOLEAN set_literal(Lit* lit) {
 
-  // ... TO DO ..
-  
-  return 0; // dummy value
+  if( lit != NULL )
+    return lit->var_ptr->is_set;
+  return 0;
+}
+
+BOOLEAN asserted_literal(Lit* lit) {
+
+  if( lit != NULL && lit->var_ptr->is_set == 1 && lit->var_ptr->set_sign == ( lit->index > 0 ) )
+    return 1;
+  return 0;
+}
+
+BOOLEAN resolved_literal(Lit* lit) {
+
+  if( lit != NULL && lit->var_ptr->is_set == 1 && lit->var_ptr->set_sign == ( lit->index < 0 ) )
+    return 1;
+  return 0;
 }
 
 /******************************************************************************
- * Given a clause index i, you should return the corresponding clause 
+ * Given a clause index i, you should return the corresponding clause
  * structure (notice you must return a pointer to the structure)
  *
- * Note clause indices range from 1 to m where m is the number of clauses 
+ * Note clause indices range from 1 to m where m is the number of clauses
  ******************************************************************************/
 Clause* index2clausep(unsigned long i, SatState* sat_state) {
 
-  // ... TO DO ..
-
+  if( sat_state != NULL && i > 0 && i <= sat_state->clauses_size )
+    return sat_state->clauses[ i - 1 ];
   return NULL; // dummy value
 }
- 
+
 
 /******************************************************************************
- * Given a clause, you should return 
+ * Given a clause, you should return
  * --1 if the clause is subsumed in the current setting
  * --0 otherwise
  *
@@ -85,9 +99,20 @@ Clause* index2clausep(unsigned long i, SatState* sat_state) {
  ******************************************************************************/
 BOOLEAN subsumed_clause(Clause* clause) {
 
-  // ... TO DO ..
- 
-  return 0; // dummy value
+  int i;
+
+  if( clause == NULL )
+    return 0;
+  if( clause->is_subsumed == 0 ) {
+    // is this necessary? I can't tell from the above description.
+    for( i = 0; i < clause->elements_size; ++i ) {
+      if( asserted_literal(clause->elements[i]) ) {
+        clause->is_subsumed = 1;
+        break;
+      }
+    }
+  }
+  return clause->is_subsumed;
 }
 
 
@@ -98,7 +123,7 @@ BOOLEAN subsumed_clause(Clause* clause) {
  * Given a string cnf_fname, which is a file name of the input CNF, you should
  * construct a SatState
  *
- * This construction will depend on how you define a SatState 
+ * This construction will depend on how you define a SatState
  * Still, you should at least do the following:
  * --read a CNF (in DIMACS format) from the file
  * --initialize variables (n of them)
@@ -113,14 +138,14 @@ BOOLEAN subsumed_clause(Clause* clause) {
 SatState* construct_sat_state(char* cnf_fname) {
 
   // ... TO DO ..
-  
+
   return NULL; // dummy value
 }
 
 void free_sat_state(SatState* sat_state) {
 
   // ... TO DO ..
- 
+
   return; // dummy value
 }
 
@@ -129,19 +154,19 @@ void free_sat_state(SatState* sat_state) {
  * Given a SatState, which should contain data related to the current setting
  * (i.e., decided literals, asserted literals, subsumed clauses, decision
  * level, etc.), this function should perform unit resolution at the current
- * decision level 
+ * decision level
  *
  * It returns 1 if succeeds, 0 otherwise (after constructing an asserting
  * clause)
  *
- * There are three possible places where you should perform unit resolution: 
- * (1) after deciding on a new literal (i.e., decide_literal(SatState*)) 
- * (2) after adding an asserting clause (i.e., add_asserting_clause(SatState*)) 
+ * There are three possible places where you should perform unit resolution:
+ * (1) after deciding on a new literal (i.e., decide_literal(SatState*))
+ * (2) after adding an asserting clause (i.e., add_asserting_clause(SatState*))
  * (3) neither the above, which would imply literals appearing in unit clauses
  *
- * (3) would typically happen only once and before the other two cases 
+ * (3) would typically happen only once and before the other two cases
  * It may be useful to distinguish between the above three cases
- * 
+ *
  * Note if the current decision level is L, then the literals implied by unit
  * resolution must have decision level L
  *
@@ -157,7 +182,7 @@ void free_sat_state(SatState* sat_state) {
 BOOLEAN unit_resolution(SatState* sat_state) {
 
   // ... TO DO ..
- 
+
   return 0; // dummy value
 }
 
@@ -169,8 +194,10 @@ BOOLEAN unit_resolution(SatState* sat_state) {
 void undo_unit_resolution(SatState* sat_state) {
 
   // ... TO DO ..
+  // remove last element in decision list
+  // remove all implications which are at the highest decision level
 
-  return; // dummy value
+  return;
 }
 
 
@@ -185,23 +212,21 @@ void undo_unit_resolution(SatState* sat_state) {
 BOOLEAN decide_literal(Lit* lit, SatState* sat_state) {
 
   // ... TO DO ..
-
-  return 0; // dummy value
+  // add literal to decision list
+  // set appropriate markers in literal's variable
+  return unit_resolution(sat_state);
 }
 
 
 /******************************************************************************
  * This function should undo all set literals at the current decision level (you
- * can in fact call undo_unit_resolution(SatState*)) 
+ * can in fact call undo_unit_resolution(SatState*))
  *
  * Note if the current decision level is L in the beginning of the call, it
  * should be updated to L-1 before the call ends
  ******************************************************************************/
 void undo_decide_literal(SatState* sat_state) {
-
-  // ... TO DO ..
-
-  return; // dummy value
+  return undo_unit_resolution(sat_state);
 }
 
 
@@ -213,24 +238,25 @@ void undo_decide_literal(SatState* sat_state) {
  *
  * This function should add the asserting clause into the set of learned clauses
  * (so that unit resolution from there on would also take into account the
- * asserting clause), and then perform unit resolution 
+ * asserting clause), and then perform unit resolution
  *
  * It returns 1 if unit resolution succeeds, which means the conflict is
  * cleared, and 0 otherwise (that is, we have a new asserting clause with a new
  * assertion level)
  *
  * Note since the learned clause is asserting and we are at the assertion level
- * of the clause, it will become a unit clause under the current setting 
+ * of the clause, it will become a unit clause under the current setting
  *
  * Also, if the learned clause itself is a unit clause, its assertion level must
  * be the same as the start level S, which is 1 (i.e., the level in
- * which no decision is made) 
+ * which no decision is made)
  ******************************************************************************/
 BOOLEAN add_asserting_clause(SatState* sat_state) {
 
   // ... TO DO ..
+  // add asserting clause to end of clause list (have to deal with over-capacity issue)
 
-  return 0; // dummy value
+  return unit_resolution(sat_state);
 }
 
 
@@ -244,9 +270,9 @@ BOOLEAN add_asserting_clause(SatState* sat_state) {
  ******************************************************************************/
 BOOLEAN at_assertion_level(SatState* sat_state) {
 
-  // ... TO DO ..
-
-  return 0; // dummy value
+  if( sat_state != NULL )
+    return sat_state->conflict_clausse_level == sat_state->decisions_size + 1;
+  return 0;
 }
 
 
@@ -256,9 +282,9 @@ BOOLEAN at_assertion_level(SatState* sat_state) {
  ******************************************************************************/
 BOOLEAN at_start_level(SatState* sat_state) {
 
-  // ... TO DO ..
-
-  return 0; // dummy value
+  if( sat_state != NULL )
+    return sat_state->decisions_size == 0;
+  return 0;
 }
 
 
@@ -273,9 +299,11 @@ BOOLEAN at_start_level(SatState* sat_state) {
  ******************************************************************************/
 BOOLEAN conflict_exists(SatState* sat_state) {
 
-  // ... TO DO ..
-
-  return 0; // dummy value
+  // Is this enough here, or do we ned to actually test?
+  // unit_resolution(sat_state);
+  if( sat_state != NULL )
+    return sat_state->conflict_clause_level == sat_state->decisions_size;
+  return 0;
 }
 
 /******************************************************************************
