@@ -92,6 +92,7 @@ typedef struct {
   Lit **decisions;
   long  decisions_size;
   long  decisions_capacity;
+  long  decision_level
 
   Lit **implications;
   long *implications_levels;
