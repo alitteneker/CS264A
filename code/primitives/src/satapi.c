@@ -103,19 +103,6 @@ BOOLEAN subsumed_clause(Clause* clause) {
 
   if( clause == NULL )
     return 0;
-
-  if( clause->is_subsumed == 0 ) {
-
-    // is this necessary? I can't tell from the above description.
-    // I'm thinking that is's not necessary for the sat solver algorithm,
-    // unless we borrow this for internal repurposing repurposed.
-    for( i = 0; i < clause->elements_size; ++i ) {
-      if( asserted_literal(clause->elements[i]) ) {
-        clause->is_subsumed = 1;
-        break;
-      }
-    }
-  }
   return clause->is_subsumed;
 }
 
@@ -211,6 +198,20 @@ void free_sat_state(SatState* sat_state) {
 
   // TODO
   return; // dummy value
+}
+
+BOOLEAN unapply_literal(Lit *lit, SatState* sat_state) {
+  unsigned long index;
+
+  if( lit == NULL || !set_literal(lit) )
+    return 0;
+
+  lit->var_ptr->is_set = 1;
+  for( index = 0; index < lit->var_ptr->used_clauses_size; ++index ) {
+    var_ptr->needs_checking = 1;
+  }
+
+  return 1;
 }
 
 BOOLEAN apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
@@ -529,16 +530,24 @@ BOOLEAN unit_resolution(SatState* sat_state) {
  * level
  ******************************************************************************/
 void undo_unit_resolution(SatState* sat_state) {
+  unsigned long index;
+  Lit *decision;
 
-  // TODO:
-  // remove last element in decision list
-  // for each implicaiton at the highest decision level
-  //   unset the variable
-  //   mark the connected clauses as needing to be checked
-  // for each clause in the clause list
-  //   if needs checking
-  //     reset the watches
-  //     check the subsumed flag
+  if( sat_state == NULL || sat_state->decisions_size == 0 )
+    return;
+
+  decision = sat_state->decisions[--decisions_size];
+
+  for( index = sat_state->implications_size-1;
+    index >= 0 && sat_state->implications[index]->var_ptr->decision_level >= decision->var_ptr->decision_level;
+    --index ) {
+      unapply_literal(sat_state->implications[index]);
+    }
+  for( index = 0; index < sat_state->clauses_size; ++index ) {
+    if( sat_state->clauses[index]->needs_checking ) {
+      check_clause(sat_state->clauses[index]);
+    }
+  }
   return;
 }
 
@@ -577,13 +586,26 @@ void undo_decide_literal(SatState* sat_state) {
  * which no decision is made)
  ******************************************************************************/
 BOOLEAN add_asserting_clause(SatState* sat_state) {
+  unsigned long index;
 
   if( sat_state == NULL )
     return 0;
+
+  sat_state->assertion_clause->needs_checking = 1;
+  sat_state->assertion_clause->is_subsumed = 0;
+
+  for( index = 0; index < sat_state->assertion_clause->elements_size; ++index ) {
+    // TODO: have to deal with over-capacity issue
+    sat_state->assertion_clause->elements[index]->var_ptr->used_clauses[
+        sat_state->assertion_clause->elements[index]->var_ptr->used_clauses_size++
+      ] = sat_state->assertion_clause;
+  }
+
   // TODO: have to deal with over-capacity issue
   sat_state->clauses[ sat_state->clauses_size++ ] = sat_state->assertion_clause;
   sat_state->assertion_clause = NULL;
   sat_state->assertion_clause_level = 0;
+
   return unit_resolution(sat_state);
 }
 
