@@ -33,7 +33,7 @@ typedef struct {
 
   BOOLEAN is_set;   // whether or not this variable has been set
   BOOLEAN set_sign; // sign of the set variable
-
+  int level; //level of  a variable, would be used for unit resolution.
 } Var;
 
 
