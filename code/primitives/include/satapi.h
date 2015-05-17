@@ -41,11 +41,7 @@ typedef struct {
   unsigned long set_depth;
   unsigned long used_depth;
   unsigned long path_count;
-<<<<<<< HEAD
   struct Clause *implication_clause;
-=======
-  Clause *implication_clause;
->>>>>>> c025c68875e316df81935f57aa34c0d76b1143fc
 
 } Var;
 

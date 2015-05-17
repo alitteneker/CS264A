@@ -1,4 +1,5 @@
 #include "satapi.h"
+#include "mathh.h"
 
 
 /******************************************************************************
@@ -142,31 +143,61 @@ BOOLEAN subsumed_clause(Clause* clause) {
 SatState* construct_sat_state(char* cnf_fname) {
   SatState *ret = NULL;;
   FILE *fp;
+  Clause **cls;
+  Lit **lit;
+  Var **var;
+
+  int variable_count = 1;
+
+  int indx;
   fp = fopen(cnf_fname, "r");
 
+  int num_clause = 0;
+  int num_var = 0;
+   
   if(fp == NULL){
     ret = NULL;
   }
   else{
     size_t buf = 80;
     char *buffer = malloc(buf * sizeof(char));
-    int clause_count = 0;
-    int indx = 0;
     while(getline(&buffer, &buf, fp)!=-1){
        char fst_char = buffer[0];
        if( fst_char == 'c')
          continue;
        else if( fst_char== 'p'){
-         ret-> variables_size =(buffer[6]);
+         ret-> variables_size = buffer[6];
          ret-> clauses_size = buffer[8];
-         clause_count = ret-> clauses_size;
-         continue;
-       }
-       else if( !(fst_char >= 'a' && fst_char <= 'z') && clause_count > 0){
-         if(indx == 0){
-           Clause cls[clause_count];
-
+         cls = malloc(ret-> clauses_size * sizeof(Clause));
+         lit = malloc(ret -> variable_size * 2 * sizeof(Lit));
+         var = malloc(ret -> variable_size * sizeof(Var));
+           
+         //initialize variable 
+         for( int i = 0 ; i < ret-> variable_size; i++){
+           var[i] -> index = i; 
          }
+
+         //initialize literals
+         for( int i = 0; i < ret -> variable_size*2; i+2){
+          lit[i] -> index = i;
+          lit[i+1]->index = (0-i);
+          lit[i] -> var_ptr = cls[i];
+          lit[i+1] -> var_ptr = cls[i];
+          var[i]-> pos_literal = lit[i];
+          var[i]-> neg_literal = lit[i+1];
+        }
+        continue;
+       }
+       //else it's the caluse
+       else if( !(fst_char >= 'a' && fst_char <= 'z') && clause_count > 0){
+         //initialize clauses
+         int counter = 0;
+         for(int i = 0; i < strlen(buffer) ; i++){
+           if(buffer[i] !=' ' && buffer[i] != '-')
+             count++;
+         }
+         
+         
        }
        else
          continue;
@@ -174,9 +205,9 @@ SatState* construct_sat_state(char* cnf_fname) {
 
 
   }
+  flose(fp);
   return ret; // dummy value
 }
-
 void free_sat_state(SatState* sat_state) {
 
   // TODO
