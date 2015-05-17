@@ -364,15 +364,42 @@ Lit* find_UIP(SatState* sat_state, unsigned long decision_level, unsigned long t
 
 // this will actually build the new clause
 Clause* build_assertion_clause(Lit *uip, SatState *sat_state) {
-  unsigned long index;
+  unsigned long index, cut_size;
   long assertion_level;
+  Lit **cut;
+  Clause *clause;
 
   // this would indicate we have no uip (conflict through only unit clause implications)
   if( uip == NULL )
     return NULL;
 
-  // collect a list of all of the literals which have edges which cross the uip's depth
-  // simultaneously calculate the highest and second highest level
+  cut = malloc( sat_state->variables_size * sizeof(Lit*) );
+  cut_size = 0;
+  for( index = 0; index < implications_size; ++index ) {
+    if( sat_state->implications[index]->var_ptr->path_count > 0 ) {
+      if( sat_state->implications[index]->var_ptr->decision_level < uip->var_ptr->decision_level
+        && sat_state->implications[index]->var_ptr->decision_level > assertion_level ) {
+        assertion_level = sat_state->implications[index]->var_ptr->decision_level;
+      }
+      if( sat_state->implications[index]->var_ptr->set_depth <= uip->var_ptr->set_depth
+        && sat_state->implications[index]->var_ptr->used_depth >= uip->var_ptr->set_depth + 1 ) {
+          cut[cut_size++] = sat_state->implications[index];
+        }
+    }
+  }
+
+  clause = malloc(sizeof(Clause));
+  clause->elements = malloc( cut_size * sizeof(Lit*) );
+  clause->elements[size] = cut_size;
+  for( index = 0; index < cut_size; ++index ) {
+    clause->elements[index] = cut[index];
+  }
+  free(cut);
+
+  sat_state->assertion_clause = clause;
+  sat_state->assertion_level = assertion_level;
+
+  return clause;
 }
 
 // this method runs all relevant calculations for assertion clause generation
@@ -385,6 +412,8 @@ void generate_assertion_clause(Clause *clause, SatState* sat_state) {
   total_paths = calc_total_paths(clause, decision_level, sat_state);
   uip = find_UIP(sat_state, decision_level, total_paths);
   build_assertion_clause(uip, sat_state);
+
+  return;
 }
 
 BOOLEAN check_clause( Clause* clause ) {
@@ -393,7 +422,7 @@ BOOLEAN check_clause( Clause* clause ) {
   BOOLEAN found_lit_1, found_lit_2;
 
   // if both watches are still free, then just return
-  if( !set_literal( clause->watch_1 ) && !set_literal( clause->watch_2 ) )
+  if( !set_literal( clause->watch_1 ) && !set_literal( clause->watch_2 ) && clause->watch_1 != clause->watch_2 )
     return 1;
 
   // Now we know that one of our watches has changed, search for two free watch statements
