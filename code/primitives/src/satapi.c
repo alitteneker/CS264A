@@ -210,7 +210,7 @@ BOOLEAN apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
     lit->var_ptr->set_depth = max_depth + 1;
   }
   else {
-    lit->var_ptr->decision_level = sat_state->decisions_size;
+    lit->var_ptr->decision_level = sat_state->decisions_size + 1;
     lit->var_ptr->set_depth = 0;
   }
 
@@ -280,31 +280,119 @@ BOOLEAN imply_literal(Lit *lit, Clause *clause, SatState *sat_state) {
  * Yet, the first decided literal must have 2 as its decision level
  ******************************************************************************/
 
+unsigned long recurse_paths(Lit *lit, unsigned long level) {
+  unsigned long paths, index;
+
+  if( lit->var_ptr->implication_clause == NULL ) {
+    paths = 1;
+  }
+  else {
+    paths = 0;
+    for( index = 0; index < lit->var_ptr->implication_clause->elements_size; ++index ) {
+      if( lit->var_ptr->implication_clause->elements[index] == lit )
+        continue;
+      paths += recurse_paths( lit->var_ptr->implication_clause->elements[index], level );
+      if( lit->var_ptr->set_depth > lit->var_ptr->implication_clause->elements[index]->var_ptr->used_depth )
+        lit->var_ptr->implication_clause->elements[index]->var_ptr->used_depth = lit->var_ptr->set_depth;
+    }
+  }
+  lit->var_ptr->path_count += paths;
+
+  if( lit->var_ptr->decision_level == level )
+    return paths;
+  return 0;
+}
+
+BOOLEAN generate_assertion_clause(Clause *clause, SatState* sat_state) {
+  unsigned long index, total_paths, decision_level;
+
+  // clear out any old data in any of the implications and decisions
+  for( index = 0; index < sat_state->implications_size; ++index ) {
+    sat_state->implications[index]->var_ptr->path_count = 0;
+    sat_state->implications[index]->var_ptr->used_depth = 0;
+  }
+  for( index = 0; index < sat_state->decisions_size; ++index ) {
+    sat_state->decisions[index]->var_ptr->path_count = 0;
+    sat_state->decisions[index]->var_ptr->used_depth = 0;
+  }
+
+  // calculate the maximum level in the conflict clause
+  decision_level = 0;
+  for( index = 0; index < clause->elements_size; ++index ) {
+    if( decision_level < clause->elements[index]->var_ptr->decision_level )
+      decision_level = clause->elements[index]->var_ptr->decision_level;
+  }
+
+  // calculate the total number of same-level paths from the conflict clause to the end
+  total_paths = 0;
+  for( index = 0; index < clause->elements_size; ++index ) {
+    total_paths += recurse_paths( clause->elements[index], decision_level );
+  }
+
+  // search through the implications backwards for one with a path count equal to the total path count, UIP
+  // generate slice at the depth of the UIP
+  // calculate the second highest unique level in the cut
+  // set the new clause and found level in the sat state
+}
+
 BOOLEAN check_clause( Clause* clause ) {
   long index;
+  Lit *lit_1, *lit_2;
+  BOOLEAN found_lit_1, found_lit_2;
 
-  // if both watches are still free, then just set unflag this and return
-  if( !set_literal( clause->watch_1 ) && !set_literal( clause->watch_2 ) ) {
-    clause->needs_checking = 0;
+  // if both watches are still free, then just return
+  if( !set_literal( clause->watch_1 ) && !set_literal( clause->watch_2 ) )
     return 1;
-  }
 
   // Now we know that one of our watches has changed, search for two free watch statements
-  for( index = 0; index < clause->elements_size; ++index ) {
-
+  found_lit_1 = 0;
+  found_lit_2 = 0;
+  for( index = 0; index < clause->elements_size && !( found_lit_1 && found_lit_2 ); ++index ) {
+    if( asserted_literal(clause->elements[index]) ) {
+      clause->is_subsumed = 1;
+    }
+    if( set_literal(clause->elements[index]) == 0 ) {
+      if( !found_lit_1 ) {
+        lit_1 = clause->elements[index];
+        found_lit_1 = 1;
+      }
+      else {
+        lit_2 = clause->elements[index];
+        found_lit_2 = 1;
+      }
+    }
   }
 
+  // if we have found a contradiction
+  if( !found_lit_1 && !found_lit_2 )
+    return 0;
+
+  // if the clause still has more than one free variable
+  if( found_lit_1 && found_lit_2 ) {
+    clause->watch_1 = lit_1;
+    clause->watch_2 = lit_2;
+  }
+
+  // if we have a new implication
+  if( found_lit_1 && !found_lit_2 ) {
+    clause->is_subsumed = 1;
+    imply_literal(lit_1);
+  }
+
+  return 1;
 }
 
 BOOLEAN check_literal(Lit *lit, SatState* sat_state) {
   long index;
 
   for( index = 0; index < lit->var_ptr->used_clauses_size; ++index ) {
-    if( lit->var_ptr->used_clauses[index]->needs_checking == 1
-       && check_clause(lit->var_ptr->used_clauses[index]) == 0 ) {
-        generate_assertion_clause(lit->var_ptr->used_clauses[index], sat_state); 
+    if( lit->var_ptr->used_clauses[index]->needs_checking == 1 ) {
+      lit->var_ptr->used_clause[index]->needs_checking = 1;
+      if( check_clause(lit->var_ptr->used_clauses[index]) == 0 ) {
+        generate_assertion_clause(lit->var_ptr->used_clause[index], sat_state);
         return 0;
       }
+    }
   }
   return 1;
 }
