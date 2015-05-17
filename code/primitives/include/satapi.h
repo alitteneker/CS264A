@@ -29,8 +29,8 @@ typedef struct {
 
   unsigned long index;
 
-  Lit *pos_literal;
-  Lit *neg_literal;
+  struct Lit *pos_literal;
+  struct Lit *neg_literal;
 
   BOOLEAN is_set;   // whether or not this variable has been set
   BOOLEAN set_sign; // sign of the set variable
@@ -40,6 +40,7 @@ typedef struct {
   unsigned long path count;
   Clause *implication_clause;
 
+  int level; //level of  a variable, would be used for unit resolution.
 } Var;
 
 
@@ -88,7 +89,7 @@ typedef struct {
 
 typedef struct {
 
-  Var         **variables;
+  Var **variables;
   unsigned long variables_size;
 
   Clause      **clauses;

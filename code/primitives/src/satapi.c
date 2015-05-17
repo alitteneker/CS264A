@@ -21,7 +21,7 @@
  ******************************************************************************/
 Var* index2varp(unsigned long i, SatState* sat_state) {
 
-  if( sat_state != NULL && i > 0 && i <= sat_state->variables_length )
+  if( sat_state != NULL && i > 0 && i <= sat_state->variables_size )
     return sat_state->variables[ i - 1 ];
   return NULL;
 }
@@ -138,9 +138,41 @@ BOOLEAN subsumed_clause(Clause* clause) {
  * SatState (free_sat_state)
  ******************************************************************************/
 SatState* construct_sat_state(char* cnf_fname) {
+  SatState *ret = NULL;;
+  FILE *fp;
+  fp = fopen(cnf_fname, "r");
 
-  // TODO
-  return NULL; // dummy value
+  if(fp == NULL){
+    ret = NULL;
+  }
+  else{
+    size_t buf = 80;
+    char *buffer = malloc(buf * sizeof(char));
+    int clause_count = 0;
+    int indx = 0;
+    while(getline(&buffer, &buf, fp)!=-1){
+       char fst_char = buffer[0];
+       if( fst_char == 'c')
+         continue;
+       else if( fst_char== 'p'){
+         ret-> variables_size =(buffer[6]);
+         ret-> clauses_size = buffer[8];
+         clause_count = ret-> clauses_size;
+         continue;
+       }
+       else if( !(fst_char >= 'a' && fst_char <= 'z') && clause_count > 0){
+         if(indx == 0){
+           Clause cls[clause_count];
+
+         }
+       }
+       else
+         continue;
+    }
+
+
+  }
+  return ret; // dummy value
 }
 
 void free_sat_state(SatState* sat_state) {
@@ -298,7 +330,7 @@ void undo_decide_literal(SatState* sat_state) {
 BOOLEAN add_asserting_clause(SatState* sat_state) {
 
   if( sat_state == NULL )
-    return;
+    return 0;
   // TODO: have to deal with over-capacity issue
   sat_state->clauses[ sat_state->clauses_size++ ] = sat_state->asserting_clause;
   sat_state->assertion_clause = NULL;
