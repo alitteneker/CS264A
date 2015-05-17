@@ -41,7 +41,7 @@ typedef struct {
   unsigned long decision_level;
   unsigned long set_depth;
   unsigned long used_depth;
-  unsigned long path count;
+  unsigned long path_count;
   Clause *implication_clause;
 
 } Var;
