@@ -21,7 +21,7 @@
  ******************************************************************************/
 Var* index2varp(unsigned long i, SatState* sat_state) {
 
-  if( sat_state != NULL && i > 0 && i <= sat_state->variables_length )
+  if( sat_state != NULL && i > 0 && i <= sat_state->variables_size )
     return sat_state->variables[ i - 1 ];
   return NULL;
 }
@@ -161,7 +161,7 @@ void free_sat_state(SatState* sat_state) {
 BOOLEAN decide_literal(Lit* lit, SatState* sat_state) {
 
   // TODO: need to deal with over capacity issue
-  sat_state->decisions[ sat_state->decisions_size++ ];
+  sat_state->decisions[sat_state->decisions_size++];
   return unit_resolution(sat_state);
 }
 
@@ -234,7 +234,7 @@ void undo_unit_resolution(SatState* sat_state) {
 
   // TODO:
   // remove last element in decision list
-  // remove all implications which are at the highest decision level\
+  // remove all implications which are at the highest decision level
   return;
 }
 
@@ -275,9 +275,9 @@ void undo_decide_literal(SatState* sat_state) {
 BOOLEAN add_asserting_clause(SatState* sat_state) {
 
   if( sat_state == NULL )
-    return;
+    return 0;
   // TODO: have to deal with over-capacity issue
-  sat_state->clauses[ sat_state->clauses_size++ ] = sat_state->asserting_clause;
+  sat_state->clauses[ sat_state->clauses_size++ ] = sat_state->assertion_clause;
   return unit_resolution(sat_state);
 }
 
@@ -293,7 +293,7 @@ BOOLEAN add_asserting_clause(SatState* sat_state) {
 BOOLEAN at_assertion_level(SatState* sat_state) {
 
   if( sat_state != NULL )
-    return sat_state->conflict_clausse_level == sat_state->decisions_size + 1;
+    return sat_state->conflict_clause_level == sat_state->decisions_size + 1;
   return 0;
 }
 
