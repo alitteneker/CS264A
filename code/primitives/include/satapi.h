@@ -23,6 +23,7 @@ typedef char BOOLEAN;
  * --Index of a variable must be of type "unsigned long"
  ******************************************************************************/
 struct Lit;
+struct Clause;
 
 typedef struct {
 
@@ -33,6 +34,11 @@ typedef struct {
 
   BOOLEAN is_set;   // whether or not this variable has been set
   BOOLEAN set_sign; // sign of the set variable
+  unsigned long decision_level;
+  unsigned long set_depth;
+  unsigned long used_depth;
+  unsigned long path count;
+  Clause *implication_clause;
 
 } Var;
 
@@ -68,8 +74,8 @@ typedef struct {
   Lit **elements;
   unsigned long elements_size;
 
-  signed long watch_index_1;
-  signed long watch_index_2;
+  Lit *watch_1;
+  Lit *watch_2;
 
 } Clause;
 
@@ -85,25 +91,20 @@ typedef struct {
   Var         **variables;
   unsigned long variables_size;
 
-  Clause **clauses;
-  long     clauses_size; // indices must start at 1
-  long     clauses_capacity;
+  Clause      **clauses;
+  unsigned long clauses_size; // indices must start at 1
+  unsigned long clauses_capacity;
 
-  Lit **decisions;
-  long  decisions_size;
-  long  decisions_capacity;
-  long  decision_level
+  Lit          **decisions;
+  unsigned long  decisions_size;
+  unsigned long  decisions_applied;
 
-  Lit **implications;
-  long *implications_levels;
-  long *implications_clauses;
-  long  implications_size;
-  long  implications_capacity;
+  Lit          **implications;
+  unsigned long  implications_size;
+  unsigned long  implications_applied;
 
-  long conflict_clause_index;
-  long conflict_clause_level;
-
-  Clause *assertion_clause;
+  Clause       *assertion_clause;
+  unsigned long assertion_clause_level;
 
 } SatState;
 

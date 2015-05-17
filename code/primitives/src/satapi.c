@@ -149,6 +149,24 @@ void free_sat_state(SatState* sat_state) {
   return; // dummy value
 }
 
+BOOLEAN apply_literal(Lit* lit, Clause* clause) {
+
+  if( lit == NULL || lit->is_set == 1 )
+    return 0;
+
+  lit->var_ptr->is_set = 1;
+  lit->var_ptr->set_sign = lit->index > 0;
+  lit->var_ptr->implication_clause = clause;
+  if( clause != NULL ) {
+    // walk through all literals in clause
+    // find maximum level of parents
+  }
+  else {
+    lit->var_ptr->decision_level = sat_state->decisions_size;
+    lit->var_ptr->set_depth = 0;
+  }
+  return 1;
+}
 
 /******************************************************************************
  * This function should set literal lit to true and then perform unit resolution
@@ -160,12 +178,12 @@ void free_sat_state(SatState* sat_state) {
  ******************************************************************************/
 BOOLEAN decide_literal(Lit* lit, SatState* sat_state) {
 
-  // TODO: need to deal with over capacity issue
-  sat_state->decisions[ sat_state->decisions_size++ ];
+  sat_state->decisions[ sat_state->decisions_size++ ] = lit;
+  apply_literal(lit, NULL);
   return unit_resolution(sat_state);
 }
 
-BOOLEAN imply_literal(Lit* lit, long level, long clause_index, SatState* sat_state) {
+BOOLEAN imply_literal(Lit *lit, Clause *clause, SatState *sat_state) {
 
   unsigned long index;
   int i;
@@ -173,17 +191,8 @@ BOOLEAN imply_literal(Lit* lit, long level, long clause_index, SatState* sat_sta
   if( sat_state == NULL || lit == NULL || set_literal(lit) )
     return 0;
 
-  // make sure that the passed implication is not already in the implication list
-  index = lit->var_ptr->index;
-  for( i = 0; i < sat_state->implications_size; ++i ) {
-    if( sat_state->implications[i]->var_ptr->index == index )
-      return 0;
-  }
-
-  // TODO: need to deal with over capacity issue
-  sat_state->implications[sat_state->implications_size] = lit;
-  sat_state->implications_levels[sat_state->implications_size]     = level;
-  sat_state->implications_clauses[sat_state->implications_size]    = clause_index; // make it a pointer to the clause itself?
+  sat_state->implications[ sat_state->implications_size++ ] = lit;
+  apply_literal(lit, clause);
   ++sat_state->implications_size;
 
   return 1;
@@ -219,10 +228,18 @@ BOOLEAN imply_literal(Lit* lit, long level, long clause_index, SatState* sat_sta
  *
  * Yet, the first decided literal must have 2 as its decision level
  ******************************************************************************/
+BOOLEAN check_literal
 BOOLEAN unit_resolution(SatState* sat_state) {
 
-  // TODO
-  return 0; // dummy value
+  while( sat_state->decisions_applied < sat_state->decisions_size ) {
+    if( !check_literal( sat_state->decisions[ sat_state->decisions_applied++ ] ) )
+      return 0;
+  }
+  while( sat_state->implications_applied < sat_state->implications_size ) {
+    if( !check_literal( sat_state->implications[ sat_state->implications_applied++ ] ) )
+      return 0;
+  }
+  return 1;
 }
 
 
@@ -234,7 +251,13 @@ void undo_unit_resolution(SatState* sat_state) {
 
   // TODO:
   // remove last element in decision list
-  // remove all implications which are at the highest decision level\
+  // for each implicaiton at the highest decision level
+  //   unset the variable
+  //   mark the connected clauses as needing to be checked
+  // for each clause in the clause list
+  //   if needs checking
+  //     reset the watches
+  //     check the subsumed flag
   return;
 }
 
@@ -278,6 +301,8 @@ BOOLEAN add_asserting_clause(SatState* sat_state) {
     return;
   // TODO: have to deal with over-capacity issue
   sat_state->clauses[ sat_state->clauses_size++ ] = sat_state->asserting_clause;
+  sat_state->assertion_clause = NULL;
+  sat_state->assertion_clause_level = 0;
   return unit_resolution(sat_state);
 }
 
@@ -293,7 +318,7 @@ BOOLEAN add_asserting_clause(SatState* sat_state) {
 BOOLEAN at_assertion_level(SatState* sat_state) {
 
   if( sat_state != NULL )
-    return sat_state->conflict_clausse_level == sat_state->decisions_size + 1;
+    return sat_state->assertion_clausse_level == sat_state->decisions_size + 1;
   return 0;
 }
 
@@ -321,9 +346,10 @@ BOOLEAN at_start_level(SatState* sat_state) {
  ******************************************************************************/
 BOOLEAN conflict_exists(SatState* sat_state) {
 
-  // Is this enough here, or do we ned to actually test: unit_resolution(sat_state);
-  if( sat_state != NULL )
+  if( sat_state != NULL ) {
+    // Is this enough here, or do we ned to actually test: unit_resolution(sat_state);
     return sat_state->conflict_clause_level == sat_state->decisions_size;
+  }
   return 0;
 }
 
