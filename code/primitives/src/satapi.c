@@ -318,13 +318,17 @@ unsigned long recurse_paths(Lit *lit, unsigned long level) {
     paths = 1;
   }
   else {
-    paths = 0;
-    for( index = 0; index < lit->var_ptr->implication_clause->elements_size; ++index ) {
-      if( lit->var_ptr->implication_clause->elements[index] == lit )
-        continue;
-      paths += recurse_paths( lit->var_ptr->implication_clause->elements[index], level );
-      if( lit->var_ptr->set_depth > lit->var_ptr->implication_clause->elements[index]->var_ptr->used_depth )
-        lit->var_ptr->implication_clause->elements[index]->var_ptr->used_depth = lit->var_ptr->set_depth;
+    if( lit->var_ptr->implication_clause->elements_size == 1 )
+      paths = 1;
+    else {
+      paths = 0;
+      for( index = 0; index < lit->var_ptr->implication_clause->elements_size; ++index ) {
+        if( lit->var_ptr->implication_clause->elements[index] == lit )
+          continue;
+        paths += recurse_paths( lit->var_ptr->implication_clause->elements[index], level );
+        if( lit->var_ptr->set_depth > lit->var_ptr->implication_clause->elements[index]->var_ptr->used_depth )
+          lit->var_ptr->implication_clause->elements[index]->var_ptr->used_depth = lit->var_ptr->set_depth;
+      }
     }
   }
   lit->var_ptr->path_count += paths;
@@ -334,8 +338,21 @@ unsigned long recurse_paths(Lit *lit, unsigned long level) {
   return 0;
 }
 
-BOOLEAN generate_assertion_clause(Clause *clause, SatState* sat_state) {
-  unsigned long index, total_paths, decision_level;
+unsigned long calc_decision_level(Clause *clause) {
+  unsigned long decision_level;
+
+  // calculate the maximum level in the conflict clause
+  decision_level = 0;
+  for( index = 0; index < clause->elements_size; ++index ) {
+    if( decision_level < clause->elements[index]->var_ptr->decision_level )
+      decision_level = clause->elements[index]->var_ptr->decision_level;
+  }
+
+  return decision_level;
+}
+
+unsigned long calc_total_paths(Clause *clause, unsigned long decision_level, SatState *sat_state) {
+  unsigned long total_paths, index;
 
   // clear out any old data in any of the implications and decisions
   for( index = 0; index < sat_state->implications_size; ++index ) {
@@ -347,23 +364,87 @@ BOOLEAN generate_assertion_clause(Clause *clause, SatState* sat_state) {
     sat_state->decisions[index]->var_ptr->used_depth = 0;
   }
 
-  // calculate the maximum level in the conflict clause
-  decision_level = 0;
-  for( index = 0; index < clause->elements_size; ++index ) {
-    if( decision_level < clause->elements[index]->var_ptr->decision_level )
-      decision_level = clause->elements[index]->var_ptr->decision_level;
-  }
-
   // calculate the total number of same-level paths from the conflict clause to the end
   total_paths = 0;
   for( index = 0; index < clause->elements_size; ++index ) {
     total_paths += recurse_paths( clause->elements[index], decision_level );
   }
 
-  // search through the implications backwards for one with a path count equal to the total path count, UIP
-  // generate slice at the depth of the UIP
-  // calculate the second highest unique level in the cut
-  // set the new clause and found level in the sat state
+  return total_paths;
+}
+
+Lit* find_UIP(SatState* sat_state, unsigned long decision_level, unsigned long total_paths) {
+  long index;
+
+  for(index = sat_state->implications_size-1; index >= 0; --index ) {
+    if( sat_state->implications[index]->var_ptr->decision_level < decision_level ) {
+      index = -1;
+      break;
+    }
+    if( sat_state->implications[index]->var_ptr->path_count == total_paths )
+      break;
+  }
+
+  if( index < 0 ) {
+    if( decision_level > 1 )
+      return sat_state->decisions[ decision_level - 2 ];
+    return NULL;
+  }
+  return sat_state->implications[index];
+}
+
+// this will actually build the new clause
+Clause* build_assertion_clause(Lit *uip, SatState *sat_state) {
+  unsigned long index, cut_size;
+  long assertion_level;
+  Lit **cut;
+  Clause *clause;
+
+  // this would indicate we have no uip (conflict through only unit clause implications)
+  if( uip == NULL )
+    return NULL;
+
+  cut = malloc( sat_state->variables_size * sizeof(Lit*) );
+  cut_size = 0;
+  for( index = 0; index < implications_size; ++index ) {
+    if( sat_state->implications[index]->var_ptr->path_count > 0 ) {
+      if( sat_state->implications[index]->var_ptr->decision_level < uip->var_ptr->decision_level
+        && sat_state->implications[index]->var_ptr->decision_level > assertion_level ) {
+        assertion_level = sat_state->implications[index]->var_ptr->decision_level;
+      }
+      if( sat_state->implications[index]->var_ptr->set_depth <= uip->var_ptr->set_depth
+        && sat_state->implications[index]->var_ptr->used_depth >= uip->var_ptr->set_depth + 1 ) {
+          cut[cut_size++] = sat_state->implications[index];
+        }
+    }
+  }
+
+  clause = malloc(sizeof(Clause));
+  clause->elements = malloc( cut_size * sizeof(Lit*) );
+  clause->elements[size] = cut_size;
+  for( index = 0; index < cut_size; ++index ) {
+    clause->elements[index] = cut[index];
+  }
+  free(cut);
+
+  sat_state->assertion_clause = clause;
+  sat_state->assertion_level = assertion_level;
+
+  return clause;
+}
+
+// this method runs all relevant calculations for assertion clause generation
+// THIS METHOD CALLS THE METHOD ABOVE, only cal this method directly
+void generate_assertion_clause(Clause *clause, SatState* sat_state) {
+  unsigned long total_paths, decision_level;
+  Lit *uip;
+
+  decision_level = calc_decision_level(clause);
+  total_paths = calc_total_paths(clause, decision_level, sat_state);
+  uip = find_UIP(sat_state, decision_level, total_paths);
+  build_assertion_clause(uip, sat_state);
+
+  return;
 }
 
 BOOLEAN check_clause( Clause* clause ) {
@@ -372,7 +453,7 @@ BOOLEAN check_clause( Clause* clause ) {
   BOOLEAN found_lit_1, found_lit_2;
 
   // if both watches are still free, then just return
-  if( !set_literal( clause->watch_1 ) && !set_literal( clause->watch_2 ) )
+  if( !set_literal( clause->watch_1 ) && !set_literal( clause->watch_2 ) && clause->watch_1 != clause->watch_2 )
     return 1;
 
   // Now we know that one of our watches has changed, search for two free watch statements
@@ -381,6 +462,7 @@ BOOLEAN check_clause( Clause* clause ) {
   for( index = 0; index < clause->elements_size && !( found_lit_1 && found_lit_2 ); ++index ) {
     if( asserted_literal(clause->elements[index]) ) {
       clause->is_subsumed = 1;
+      return 1;
     }
     if( set_literal(clause->elements[index]) == 0 ) {
       if( !found_lit_1 ) {
@@ -394,20 +476,21 @@ BOOLEAN check_clause( Clause* clause ) {
     }
   }
 
-  // if we have found a contradiction
-  if( !found_lit_1 && !found_lit_2 )
+  if( !found_lit_1 && !found_lit_2 ) {
+    // if we have found a contradiction
+    clause->is_subsumed = 0;
     return 0;
-
-  // if the clause still has more than one free variable
-  if( found_lit_1 && found_lit_2 ) {
-    clause->watch_1 = lit_1;
-    clause->watch_2 = lit_2;
   }
-
-  // if we have a new implication
-  if( found_lit_1 && !found_lit_2 ) {
+  else if( found_lit_1 && !found_lit_2 ) {
+    // if we have a new implication
     clause->is_subsumed = 1;
     imply_literal(lit_1);
+  }
+  else {
+    // if the clause still has more than one free variable
+    clause->watch_1 = lit_1;
+    clause->watch_2 = lit_2;
+    clause->is_subsumed = 0;
   }
 
   return 1;
