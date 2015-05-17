@@ -32,6 +32,10 @@ typedef struct {
   struct Lit *pos_literal;
   struct Lit *neg_literal;
 
+  Clause **used_clauses;
+  long     used_clauses_size;
+  long     used_clauses_capacity;
+
   BOOLEAN is_set;   // whether or not this variable has been set
   BOOLEAN set_sign; // sign of the set variable
   unsigned long decision_level;
@@ -40,7 +44,6 @@ typedef struct {
   unsigned long path count;
   Clause *implication_clause;
 
-  int level; //level of  a variable, would be used for unit resolution.
 } Var;
 
 
@@ -71,6 +74,7 @@ typedef struct {
 typedef struct {
 
   BOOLEAN is_subsumed;
+  BOOLEAN needs_checking;
 
   Lit **elements;
   unsigned long elements_size;

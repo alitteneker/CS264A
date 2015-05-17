@@ -107,6 +107,8 @@ BOOLEAN subsumed_clause(Clause* clause) {
   if( clause->is_subsumed == 0 ) {
 
     // is this necessary? I can't tell from the above description.
+    // I'm thinking that is's not necessary for the sat solver algorithm,
+    // unless we borrow this for internal repurposing repurposed.
     for( i = 0; i < clause->elements_size; ++i ) {
       if( asserted_literal(clause->elements[i]) ) {
         clause->is_subsumed = 1;
@@ -181,22 +183,42 @@ void free_sat_state(SatState* sat_state) {
   return; // dummy value
 }
 
-BOOLEAN apply_literal(Lit* lit, Clause* clause) {
+BOOLEAN apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
 
-  if( lit == NULL || lit->is_set == 1 )
+  long index, max_depth, max_level;
+
+  if( lit == NULL || set_literal(lit) )
     return 0;
 
   lit->var_ptr->is_set = 1;
   lit->var_ptr->set_sign = lit->index > 0;
   lit->var_ptr->implication_clause = clause;
+
+  // determine and set the depth and level of this new variable setting variable
   if( clause != NULL ) {
-    // walk through all literals in clause
-    // find maximum level of parents
+    max_level = 1;
+    max_depth = -1;
+    for( index = 0; index < clause->elements_size; ++index ) {
+      if( clause->elements[index]->var_ptr->is_set == 0 || clause->elements[index] == lit )
+        continue;
+      if( clause->elements[index]->var_ptr->decision_level > max_level )
+        max_level = clause->elements[index]->var_ptr->decision_level;
+      if( clause->elements[index]->var_ptr->set_depth > max_depth )
+        max_depth = clause->elements[index]->var_ptr->set_depth;
+    }
+    lit->var_ptr->decision_level = max_level;
+    lit->var_ptr->set_depth = max_depth + 1;
   }
   else {
     lit->var_ptr->decision_level = sat_state->decisions_size;
     lit->var_ptr->set_depth = 0;
   }
+
+  // flag all the clauses that use this new setting
+  for( index = 0; index < lit->var_ptr->used_clauses_size; ++index )
+    if( lit->var_ptr->used_clauses[index]->is_subsumed == 0 )
+      lit->var_ptr->used_clauses[index]->needs_checking = 1;
+
   return 1;
 }
 
@@ -211,20 +233,17 @@ BOOLEAN apply_literal(Lit* lit, Clause* clause) {
 BOOLEAN decide_literal(Lit* lit, SatState* sat_state) {
 
   sat_state->decisions[ sat_state->decisions_size++ ] = lit;
-  apply_literal(lit, NULL);
+  apply_literal(lit, NULL, sat_state);
   return unit_resolution(sat_state);
 }
 
 BOOLEAN imply_literal(Lit *lit, Clause *clause, SatState *sat_state) {
 
-  unsigned long index;
-  int i;
-
   if( sat_state == NULL || lit == NULL || set_literal(lit) )
     return 0;
 
   sat_state->implications[ sat_state->implications_size++ ] = lit;
-  apply_literal(lit, clause);
+  apply_literal(lit, clause, sat_state);
   ++sat_state->implications_size;
 
   return 1;
@@ -260,7 +279,18 @@ BOOLEAN imply_literal(Lit *lit, Clause *clause, SatState *sat_state) {
  *
  * Yet, the first decided literal must have 2 as its decision level
  ******************************************************************************/
-BOOLEAN check_literal
+
+BOOLEAN check_literal(Lit *lit) {
+  long index;
+
+  for( index = 0; index < lit->var_ptr->used_clauses_size; ++index ) {
+    if( lit->var_ptr->used_clauses[index]->needs_checking == 1
+       && check_clause(lit->var_ptr->used_clauses[index]) == 0 )
+        return 0;
+  }
+  return 1;
+}
+
 BOOLEAN unit_resolution(SatState* sat_state) {
 
   while( sat_state->decisions_applied < sat_state->decisions_size ) {
