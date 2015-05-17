@@ -280,13 +280,31 @@ BOOLEAN imply_literal(Lit *lit, Clause *clause, SatState *sat_state) {
  * Yet, the first decided literal must have 2 as its decision level
  ******************************************************************************/
 
-BOOLEAN check_literal(Lit *lit) {
+BOOLEAN check_clause( Clause* clause ) {
+  long index;
+
+  // if both watches are still free, then just set unflag this and return
+  if( !set_literal( clause->watch_1 ) && !set_literal( clause->watch_2 ) ) {
+    clause->needs_checking = 0;
+    return 1;
+  }
+
+  // Now we know that one of our watches has changed, search for two free watch statements
+  for( index = 0; index < clause->elements_size; ++index ) {
+
+  }
+
+}
+
+BOOLEAN check_literal(Lit *lit, SatState* sat_state) {
   long index;
 
   for( index = 0; index < lit->var_ptr->used_clauses_size; ++index ) {
     if( lit->var_ptr->used_clauses[index]->needs_checking == 1
-       && check_clause(lit->var_ptr->used_clauses[index]) == 0 )
+       && check_clause(lit->var_ptr->used_clauses[index]) == 0 ) {
+        generate_assertion_clause(lit->var_ptr->used_clause[index], sat_state); 
         return 0;
+      }
   }
   return 1;
 }
