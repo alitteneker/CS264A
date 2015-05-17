@@ -10,11 +10,13 @@
  ******************************************************************************/
 
 typedef char BOOLEAN;
-
+typedef struct Lit;
+typedef struct Clause;
 
 /******************************************************************************
  * Basic structures
  ******************************************************************************/
+
 
 /******************************************************************************
  * Variables:
@@ -22,9 +24,6 @@ typedef char BOOLEAN;
  * --Variable index must start at 1
  * --Index of a variable must be of type "unsigned long"
  ******************************************************************************/
-struct Lit;
-struct Clause;
-
 typedef struct {
 
   unsigned long index;
@@ -32,7 +31,7 @@ typedef struct {
   struct Lit *pos_literal;
   struct Lit *neg_literal;
 
-  Clause **used_clauses;
+  struct  Clause **used_clauses;
   long     used_clauses_size;
   long     used_clauses_capacity;
 
@@ -41,11 +40,10 @@ typedef struct {
   unsigned long decision_level;
   unsigned long set_depth;
   unsigned long used_depth;
-  unsigned long path count;
-  Clause *implication_clause;
+  unsigned long path_count;
+  struct Clause *implication_clause;
 
 } Var;
-
 
 /******************************************************************************
  * Literals:
@@ -54,14 +52,12 @@ typedef struct {
  * --Negative literals' indices range from -n to -1 (n is the number of variables)
  * --Index of a literal must be of type "signed long"
  ******************************************************************************/
-
 typedef struct {
 
   signed long index; // numeric sign indicates boolean sign
   Var *var_ptr;      // pointer to the underlying var
 
 } Lit;
-
 
 /******************************************************************************
  * Clauses:
@@ -83,7 +79,6 @@ typedef struct {
   Lit *watch_2;
 
 } Clause;
-
 
 /******************************************************************************
  * SatState:

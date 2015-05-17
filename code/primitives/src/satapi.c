@@ -302,7 +302,7 @@ BOOLEAN check_literal(Lit *lit, SatState* sat_state) {
   for( index = 0; index < lit->var_ptr->used_clauses_size; ++index ) {
     if( lit->var_ptr->used_clauses[index]->needs_checking == 1
        && check_clause(lit->var_ptr->used_clauses[index]) == 0 ) {
-        generate_assertion_clause(lit->var_ptr->used_clause[index], sat_state); 
+        generate_assertion_clause(lit->var_ptr->used_clauses[index], sat_state); 
         return 0;
       }
   }
@@ -380,7 +380,7 @@ BOOLEAN add_asserting_clause(SatState* sat_state) {
   if( sat_state == NULL )
     return 0;
   // TODO: have to deal with over-capacity issue
-  sat_state->clauses[ sat_state->clauses_size++ ] = sat_state->asserting_clause;
+  sat_state->clauses[ sat_state->clauses_size++ ] = sat_state->assertion_clause;
   sat_state->assertion_clause = NULL;
   sat_state->assertion_clause_level = 0;
   return unit_resolution(sat_state);
@@ -398,7 +398,7 @@ BOOLEAN add_asserting_clause(SatState* sat_state) {
 BOOLEAN at_assertion_level(SatState* sat_state) {
 
   if( sat_state != NULL )
-    return sat_state->assertion_clausse_level == sat_state->decisions_size + 1;
+    return sat_state->assertion_clause_level == sat_state->decisions_size + 1;
   return 0;
 }
 
