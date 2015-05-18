@@ -32,7 +32,7 @@ typedef struct {
   struct Lit *pos_literal;
   struct Lit *neg_literal;
 
-  struct  Clause **used_clauses;
+  struct Clause **used_clauses;
   long     used_clauses_size;
   long     used_clauses_capacity;
 
