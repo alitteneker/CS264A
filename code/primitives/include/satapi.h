@@ -25,6 +25,12 @@ typedef struct Clause;
  * --Variable index must start at 1
  * --Index of a variable must be of type "unsigned long"
  ******************************************************************************/
+<<<<<<< HEAD
+=======
+typedef struct Lit Lit;
+typedef struct Clause Clause;
+
+>>>>>>> 5c0f0d002b15a228cf1e503c5cbe5edb96657d3d
 typedef struct {
 
   unsigned long index;
@@ -53,12 +59,17 @@ typedef struct {
  * --Negative literals' indices range from -n to -1 (n is the number of variables)
  * --Index of a literal must be of type "signed long"
  ******************************************************************************/
+<<<<<<< HEAD
 typedef struct {
+=======
+
+struct Lit {
+>>>>>>> 5c0f0d002b15a228cf1e503c5cbe5edb96657d3d
 
   signed long index; // numeric sign indicates boolean sign
   Var *var_ptr;      // pointer to the underlying var
 
-} Lit;
+};
 
 /******************************************************************************
  * Clauses:
@@ -68,7 +79,7 @@ typedef struct {
  * the current setting (i.e., if any literal of the clause is asserted)
  ******************************************************************************/
 
-typedef struct {
+struct Clause {
 
   BOOLEAN is_subsumed;
   BOOLEAN needs_checking;
@@ -79,7 +90,7 @@ typedef struct {
   Lit *watch_1;
   Lit *watch_2;
 
-} Clause;
+};
 
 /******************************************************************************
  * SatState:
