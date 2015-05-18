@@ -416,7 +416,7 @@ Clause* build_assertion_clause(Lit *uip, SatState *sat_state) {
 
   cut = malloc( sat_state->variables_size * sizeof(Lit*) );
   cut_size = 0;
-  for( index = 0; index < sat_state -> implications_size; ++index ) {
+  for( index = 0; index < sat_state->implications_size; ++index ) {
     if( sat_state->implications[index]->var_ptr->path_count > 0 ) {
       if( sat_state->implications[index]->var_ptr->decision_level < uip->var_ptr->decision_level
         && sat_state->implications[index]->var_ptr->decision_level > assertion_level ) {
@@ -425,6 +425,18 @@ Clause* build_assertion_clause(Lit *uip, SatState *sat_state) {
       if( sat_state->implications[index]->var_ptr->set_depth <= uip->var_ptr->set_depth
         && sat_state->implications[index]->var_ptr->used_depth >= uip->var_ptr->set_depth + 1 ) {
           cut[cut_size++] = sat_state->implications[index];
+        }
+    }
+  }
+  for( index = 0; index < sat_state->decisions_size; ++index ) {
+    if( sat_state->decisions[index]->var_ptr->path_count > 0 ) {
+      if( sat_state->decisions[index]->var_ptr->decision_level < uip->var_ptr->decision_level
+        && sat_state->decisions[index]->var_ptr->decision_level > assertion_level ) {
+        assertion_level = sat_state->decisions[index]->var_ptr->decision_level;
+      }
+      if( sat_state->decisions[index]->var_ptr->set_depth <= uip->var_ptr->set_depth
+        && sat_state->decisions[index]->var_ptr->used_depth >= uip->var_ptr->set_depth + 1 ) {
+          cut[cut_size++] = sat_state->decisions[index];
         }
     }
   }
