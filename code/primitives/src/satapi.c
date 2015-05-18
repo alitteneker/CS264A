@@ -99,8 +99,6 @@ Clause* index2clausep(unsigned long i, SatState* sat_state) {
  ******************************************************************************/
 BOOLEAN subsumed_clause(Clause* clause) {
 
-  int i;
-
   if( clause == NULL )
     return 0;
   return clause->is_subsumed;
@@ -178,7 +176,7 @@ BOOLEAN unapply_literal(Lit *lit, SatState* sat_state) {
 
   lit->var_ptr->is_set = 1;
   for( index = 0; index < lit->var_ptr->used_clauses_size; ++index ) {
-    var_ptr->needs_checking = 1;
+    lit->var_ptr->used_clauses[index]->needs_checking = 1;
   }
 
   return 1;
@@ -309,7 +307,7 @@ unsigned long recurse_paths(Lit *lit, unsigned long level) {
 }
 
 unsigned long calc_decision_level(Clause *clause) {
-  unsigned long decision_level;
+  unsigned long decision_level, index;
 
   // calculate the maximum level in the conflict clause
   decision_level = 0;
@@ -403,14 +401,14 @@ Clause* build_assertion_clause(Lit *uip, SatState *sat_state) {
 
   clause = malloc(sizeof(Clause));
   clause->elements = malloc( cut_size * sizeof(Lit*) );
-  clause->elements[size] = cut_size;
+  clause->elements_size = cut_size;
   for( index = 0; index < cut_size; ++index ) {
     clause->elements[index] = cut[index];
   }
   free(cut);
 
   sat_state->assertion_clause = clause;
-  sat_state->assertion_level = assertion_level;
+  sat_state->assertion_clause_level = assertion_level;
 
   return clause;
 }
@@ -429,7 +427,7 @@ void generate_assertion_clause(Clause *clause, SatState* sat_state) {
   return;
 }
 
-BOOLEAN check_clause( Clause* clause ) {
+BOOLEAN check_clause( Clause* clause, SatState *sat_state ) {
   long index;
   Lit *lit_1, *lit_2;
   BOOLEAN found_lit_1, found_lit_2;
@@ -466,7 +464,7 @@ BOOLEAN check_clause( Clause* clause ) {
   else if( found_lit_1 && !found_lit_2 ) {
     // if we have a new implication
     clause->is_subsumed = 1;
-    imply_literal(lit_1);
+    imply_literal(lit_1, clause, sat_state);
   }
   else {
     // if the clause still has more than one free variable
@@ -483,9 +481,9 @@ BOOLEAN check_literal(Lit *lit, SatState* sat_state) {
 
   for( index = 0; index < lit->var_ptr->used_clauses_size; ++index ) {
     if( lit->var_ptr->used_clauses[index]->needs_checking == 1 ) {
-      lit->var_ptr->used_clause[index]->needs_checking = 1;
-      if( check_clause(lit->var_ptr->used_clauses[index]) == 0 ) {
-        generate_assertion_clause(lit->var_ptr->used_clause[index], sat_state);
+      lit->var_ptr->used_clauses[index]->needs_checking = 1;
+      if( check_clause( lit->var_ptr->used_clauses[index], sat_state ) == 0 ) {
+        generate_assertion_clause(lit->var_ptr->used_clauses[index], sat_state);
         return 0;
       }
     }
@@ -496,11 +494,11 @@ BOOLEAN check_literal(Lit *lit, SatState* sat_state) {
 BOOLEAN unit_resolution(SatState* sat_state) {
 
   while( sat_state->decisions_applied < sat_state->decisions_size ) {
-    if( !check_literal( sat_state->decisions[ sat_state->decisions_applied++ ] ) )
+    if( !check_literal( sat_state->decisions[ sat_state->decisions_applied++ ], sat_state ) )
       return 0;
   }
   while( sat_state->implications_applied < sat_state->implications_size ) {
-    if( !check_literal( sat_state->implications[ sat_state->implications_applied++ ] ) )
+    if( !check_literal( sat_state->implications[ sat_state->implications_applied++ ], sat_state ) )
       return 0;
   }
   return 1;
@@ -512,22 +510,24 @@ BOOLEAN unit_resolution(SatState* sat_state) {
  * level
  ******************************************************************************/
 void undo_unit_resolution(SatState* sat_state) {
-  unsigned long index;
+  long index;
   Lit *decision;
 
   if( sat_state == NULL || sat_state->decisions_size == 0 )
     return;
 
-  decision = sat_state->decisions[--decisions_size];
+  decision = sat_state->decisions[ --sat_state->decisions_size ];
 
+  // TODO: I don't think this is right. EG: Decide to conflict, generate assertion clause, partially backtrack,
+  //  run unit res, may have some implications after decided order
   for( index = sat_state->implications_size-1;
     index >= 0 && sat_state->implications[index]->var_ptr->decision_level >= decision->var_ptr->decision_level;
     --index ) {
-      unapply_literal(sat_state->implications[index]);
+      unapply_literal(sat_state->implications[index], sat_state);
     }
   for( index = 0; index < sat_state->clauses_size; ++index ) {
     if( sat_state->clauses[index]->needs_checking ) {
-      check_clause(sat_state->clauses[index]);
+      check_clause( sat_state->clauses[index], sat_state );
     }
   }
   return;
@@ -603,7 +603,8 @@ BOOLEAN add_asserting_clause(SatState* sat_state) {
 BOOLEAN at_assertion_level(SatState* sat_state) {
 
   if( sat_state != NULL )
-    return sat_state->assertion_clausse_level == sat_state->decisions_size + 1;
+    // TODO: is this right?
+    return sat_state->assertion_clause_level == sat_state->decisions_size + 1;
   return 0;
 }
 
@@ -633,7 +634,10 @@ BOOLEAN conflict_exists(SatState* sat_state) {
 
   if( sat_state != NULL ) {
     // Is this enough here, or do we ned to actually test: unit_resolution(sat_state);
-    return sat_state->conflict_clause_level == sat_state->decisions_size;
+    // TODO: I'm not sure the below code is right.
+    return sat_state->assertion_clause != NULL
+      && sat_state->assertion_clause_level
+        <= sat_state->decisions[sat_state->decisions_size-1]->var_ptr->decision_level;
   }
   return 0;
 }

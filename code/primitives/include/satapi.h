@@ -22,8 +22,8 @@ typedef char BOOLEAN;
  * --Variable index must start at 1
  * --Index of a variable must be of type "unsigned long"
  ******************************************************************************/
-struct Lit;
-struct Clause;
+typedef struct Lit Lit;
+typedef struct Clause Clause;
 
 typedef struct {
 
@@ -55,12 +55,12 @@ typedef struct {
  * --Index of a literal must be of type "signed long"
  ******************************************************************************/
 
-typedef struct {
+struct Lit {
 
   signed long index; // numeric sign indicates boolean sign
   Var *var_ptr;      // pointer to the underlying var
 
-} Lit;
+};
 
 
 /******************************************************************************
@@ -71,7 +71,7 @@ typedef struct {
  * the current setting (i.e., if any literal of the clause is asserted)
  ******************************************************************************/
 
-typedef struct {
+struct Clause {
 
   BOOLEAN is_subsumed;
   BOOLEAN needs_checking;
@@ -82,7 +82,7 @@ typedef struct {
   Lit *watch_1;
   Lit *watch_2;
 
-} Clause;
+};
 
 
 /******************************************************************************
