@@ -154,9 +154,9 @@ SatState* construct_sat_state(char* cnf_fname) {
        else if( fst_char== 'p'){
          ret-> variables_size = buffer[6];
          ret-> clauses_size = buffer[8];
-         cls = malloc(ret-> clauses_size * sizeof(Clause));
-         lit = malloc(ret -> variables_size * 2 * sizeof(Lit));
-         var = malloc(ret -> variables_size * sizeof(Var));
+         cls = malloc(ret-> clauses_size * sizeof(Clause*));
+         lit = malloc(ret -> variables_size * 2 * sizeof(Lit*));
+         var = malloc(ret -> variables_size * sizeof(Var*));
            
          //initialize variable 
          for( int i = 0 ; i < ret-> variables_size; i++){
