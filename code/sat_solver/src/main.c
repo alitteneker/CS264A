@@ -52,16 +52,16 @@ BOOLEAN sat(SatState* sat_state) {
 
 char USAGE_MSG[] = "Usage: ./sat -in_cnf <cnf_file>\n";
 
-int main(int argc, char* argv[]) {	
+int main(int argc, char* argv[]) {
 
   char* cnf_fname = NULL;
-  if(argc==3 && strcmp("-in_cnf",argv[1])==0) 
+  if(argc==3 && strcmp("-in_cnf",argv[1])==0)
     cnf_fname = argv[2];
   else {
     printf("%s",USAGE_MSG);
     exit(1);
   }
-	
+
   // construct a sat state and then check satisfiability
   SatState* sat_state = construct_sat_state(cnf_fname);
   if(sat(sat_state)) printf("SAT\n");
