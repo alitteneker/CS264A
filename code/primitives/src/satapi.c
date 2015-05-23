@@ -209,13 +209,16 @@ SatState* construct_sat_state(char* cnf_fname) {
             }
             
             //initialize literals
-            for( int i = 1; i <= ret -> variables_size*2; i+=2){
-                lit[i].index = i;
-                lit[i+1].index = -i;
-                lit[i].var_ptr = &var[i];
-                lit[i+1].var_ptr = &var[i+1];
-                var[i].pos_literal = &lit[i];
-                var[i].neg_literal = &lit[i+1];
+            int k = 1;
+            for( int j = 0; j < ret->variables_size*2; j+=2 )
+            {
+                lit[j].index = k;
+                lit[j+1].index = -k;
+                lit[j].var_ptr = &var[j];
+                lit[j+1].var_ptr = &var[j+1];
+                var[j].pos_literal = &lit[j];
+                var[j].neg_literal = &lit[j+1];
+                k++;
             }
             continue;
         }
