@@ -162,7 +162,7 @@ int get_numbers(const char *line, int **vars, size_t num_vars, Lit *lit)
     return i;
 }
 
-SatState* construct_sat_state(char* cnf_fname) {
+SatState* sat_state_new(char* cnf_fname) {
     SatState *ret;
     FILE *fp;
     Clause *cls = NULL;
@@ -273,9 +273,13 @@ SatState* construct_sat_state(char* cnf_fname) {
     fclose(fp);   
     return ret;
 }
-void free_sat_state(SatState* sat_state) {
 
-  // TODO
+//frees the SatState
+void sat_state_free(SatState* sat_state) {
+
+  free(sat_state);
+  sat_state = NULL;
+  
   return; // dummy value
 }
 
