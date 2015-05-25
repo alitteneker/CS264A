@@ -158,7 +158,6 @@ int get_numbers(const char *line, int **vars, size_t num_vars, Lit *lit)
             break;
         tmp[i] = x;
         p = q;
-    }
     *vars = tmp;
     return i;
 }
@@ -270,10 +269,8 @@ SatState* construct_sat_state(char* cnf_fname) {
             continue;
         }
         
-
     }
-    fclose(fp);
-    
+    fclose(fp);   
     return ret;
 }
 void free_sat_state(SatState* sat_state) {
@@ -296,12 +293,13 @@ BOOLEAN unapply_literal(Lit *lit, SatState* sat_state) {
   return 1;
 }
 
-BOOLEAN apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
+// return the decision level found
+long apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
 
   long index, max_depth, max_level;
 
   if( lit == NULL || set_literal(lit) )
-    return 0;
+    return -1;
 
   lit->var_ptr->is_set = 1;
   lit->var_ptr->set_sign = lit->index > 0;
@@ -323,8 +321,8 @@ BOOLEAN apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
     lit->var_ptr->set_depth = max_depth + 1;
   }
   else {
-    lit->var_ptr->decision_level = sat_state->decisions_size + 1;
-    lit->var_ptr->set_depth = 0;
+    max_level = lit->var_ptr->decision_level = sat_state->decisions_size + 1;
+    max_depth = lit->var_ptr->set_depth = 0;
   }
 
   // flag all the clauses that use this new setting
@@ -332,7 +330,7 @@ BOOLEAN apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
     if( lit->var_ptr->used_clauses[index]->is_subsumed == 0 )
       lit->var_ptr->used_clauses[index]->needs_checking = 1;
 
-  return 1;
+  return max_level;
 }
 
 /******************************************************************************
@@ -345,19 +343,43 @@ BOOLEAN apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
  ******************************************************************************/
 BOOLEAN decide_literal(Lit* lit, SatState* sat_state) {
 
+  if( sat_state == NULL || lit == NULL
+    || set_literal(lit) || sat_state->decisions_size == sat_state->variables_size )
+      return 0;
+
   sat_state->decisions[ sat_state->decisions_size++ ] = lit;
   apply_literal(lit, NULL, sat_state);
   return unit_resolution(sat_state);
 }
 
 BOOLEAN imply_literal(Lit *lit, Clause *clause, SatState *sat_state) {
+  long level, i, index;
 
-  if( sat_state == NULL || lit == NULL || set_literal(lit) )
-    return 0;
+  if( sat_state == NULL || lit == NULL
+    || set_literal(lit) || sat_state->implications_size == sat_state->implications_size )
+      return 0;
 
-  sat_state->implications[ sat_state->implications_size++ ] = lit;
-  apply_literal(lit, clause, sat_state);
-  ++sat_state->implications_size;
+  level = apply_literal(lit, clause, sat_state);
+  if( sat_state->implications_size == 0
+    || level >= sat_state->implications[sat_state->implications_size]->var_ptr->decision_level ) {
+      sat_state->implications[ sat_state->implications_size++ ] = lit;
+  }
+  else {
+    // in this case, we have at least one out of sequence implication
+    // (need to have implication list sorted by decision level)
+    // find appropriate insertion point, and shift after that point along
+    for( i = sat_state->implications_size-1; i >= 0; ++i ) {
+      index = i;
+      if( sat_state->implications[i]->var_ptr->decision_level <= level ) {
+        ++index;
+        break;
+      }
+      else {
+        sat_state->implications[i+1] = sat_state->implications[i];
+      }
+    }
+    sat_state->implications[index] = lit;
+  }
 
   return 1;
 }
@@ -631,14 +653,11 @@ void undo_unit_resolution(SatState* sat_state) {
     return;
 
   decision = sat_state->decisions[ --sat_state->decisions_size ];
-
-  // TODO: I don't think this is right. EG: Decide to conflict, generate assertion clause, partially backtrack,
-  //  run unit res, may have some implications after decided order
   for( index = sat_state->implications_size-1;
     index >= 0 && sat_state->implications[index]->var_ptr->decision_level >= decision->var_ptr->decision_level;
     --index ) {
       unapply_literal(sat_state->implications[index], sat_state);
-    }
+  }
   for( index = 0; index < sat_state->clauses_size; ++index ) {
     if( sat_state->clauses[index]->needs_checking ) {
       check_clause( sat_state->clauses[index], sat_state );
@@ -659,6 +678,20 @@ void undo_decide_literal(SatState* sat_state) {
   return undo_unit_resolution(sat_state);
 }
 
+Clause** resize_clause_list(Clause** original, unsigned long original_size, unsigned long new_capacity) {
+  unsigned long j;
+
+  // allocate some new memory, expand size by 10 each time: is this too much?
+  Clause **expand = malloc(new_capacity * sizeof(Clause*));
+
+  // copy over the memory into the new block
+  for( j = 0; j < original_size; ++j )
+    expand[j] = original[j];
+
+  // write the newly expanded version
+  free(original);
+  return expand;
+}
 
 /******************************************************************************
  * This function must be called after a contradiction has been found (by unit
@@ -683,6 +716,7 @@ void undo_decide_literal(SatState* sat_state) {
  ******************************************************************************/
 BOOLEAN add_asserting_clause(SatState* sat_state) {
   unsigned long index;
+  Var* var;
 
   if( sat_state == NULL )
     return 0;
@@ -691,13 +725,16 @@ BOOLEAN add_asserting_clause(SatState* sat_state) {
   sat_state->assertion_clause->is_subsumed = 0;
 
   for( index = 0; index < sat_state->assertion_clause->elements_size; ++index ) {
-    // TODO: have to deal with over-capacity issue
-    sat_state->assertion_clause->elements[index]->var_ptr->used_clauses[
-        sat_state->assertion_clause->elements[index]->var_ptr->used_clauses_size++
-      ] = sat_state->assertion_clause;
+    var = sat_state->assertion_clause->elements[index]->var_ptr;
+    if( var->used_clauses_capacity == var->used_clauses_size + 1 ) {
+        var->used_clauses = resize_clause_list( var->used_clauses, var->used_clauses_size, var->used_clauses_capacity+=10 );
+    }
+    var->used_clauses[ var->used_clauses_size++ ] = sat_state->assertion_clause;
   }
 
-  // TODO: have to deal with over-capacity issue
+  if( sat_state->clauses_capacity == sat_state->clauses_size+1 ) {
+    sat_state->clauses = resize_clause_list( sat_state->clauses, sat_state->clauses_size, sat_state->clauses_capacity+=10 );
+  }
   sat_state->clauses[ sat_state->clauses_size++ ] = sat_state->assertion_clause;
   sat_state->assertion_clause = NULL;
   sat_state->assertion_clause_level = 0;
@@ -746,11 +783,8 @@ BOOLEAN at_start_level(SatState* sat_state) {
 BOOLEAN conflict_exists(SatState* sat_state) {
 
   if( sat_state != NULL ) {
-    // Is this enough here, or do we ned to actually test: unit_resolution(sat_state);
-    // TODO: I'm not sure the below code is right.
-    return sat_state->assertion_clause != NULL
-      && sat_state->assertion_clause_level
-        <= sat_state->decisions[sat_state->decisions_size-1]->var_ptr->decision_level;
+    // I'm not sure the below code is right. Do we just need the first half of this?
+    return sat_state->assertion_clause != NULL && sat_state->assertion_clause_level <= sat_state->decisions_size+1;
   }
   return 0;
 }
