@@ -7,7 +7,7 @@ SRC = src/main.c
 
 OBJS=$(SRC:.c=.o)
 
-HEADERS = satapi.h
+HEADERS = sat_api.h
 
 sat: $(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) $(LIBRARY_FLAGS) -o $(EXEC_FILE)
