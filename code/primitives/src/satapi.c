@@ -124,7 +124,7 @@ BOOLEAN subsumed_clause(Clause* clause) {
  * You should also write a function that frees the memory allocated by a
  * SatState (free_sat_state)
  ******************************************************************************/
-int get_numbers(const char *line, int **vars, size_t num_vars)
+int get_numbers(const char *line, int **vars, size_t num_vars, Lit *lit)
 {
     int i, x;
     int *tmp;
@@ -132,11 +132,12 @@ int get_numbers(const char *line, int **vars, size_t num_vars)
     
     if(vars == NULL)
         return 0;
-    
+
     tmp = (int *)malloc(num_vars * sizeof(int));
     
     p = line;
     q = NULL;
+
     for(i=0; i < num_vars; i++){
         while(*p!=0 && isspace(*p)) p++;
         q = p;
@@ -158,7 +159,6 @@ int get_numbers(const char *line, int **vars, size_t num_vars)
         tmp[i] = x;
         p = q;
     }
-    
     *vars = tmp;
     return i;
 }
@@ -168,7 +168,6 @@ SatState* construct_sat_state(char* cnf_fname) {
     FILE *fp;
     Clause *cls = NULL;
     Lit *lit = NULL;
-    Lit *element;
     Var *var;
     
     int num_clause;
@@ -182,12 +181,13 @@ SatState* construct_sat_state(char* cnf_fname) {
     num_clause = 0;
     n = 80;
     ret = (SatState *) malloc( sizeof(SatState) );
+    memset(ret, 0x00, sizeof(SatState));
+    
     buffer = (char *)malloc(n * sizeof(char));
     
     while(getline(&buffer, &n, fp) != -1)
     {
-        // /printf("%s\n", buffer);
-        
+
         char fst_char = buffer[0];
         
         if( fst_char == 'c')
@@ -199,61 +199,81 @@ SatState* construct_sat_state(char* cnf_fname) {
             if(sscanf(buffer, "p cnf %lu %lu", &ret->variables_size, &ret->clauses_size) != 2)
                 exit(EXIT_FAILURE);
             
-            cls = (Clause *) malloc(ret-> clauses_size * sizeof(Clause *));
-            lit = (Lit *) malloc(ret -> variables_size * 2 * sizeof(Lit*));
-            var = (Var *) malloc(ret -> variables_size * sizeof(Var*));
+            ret->variables = (Var**)malloc(sizeof(Var *));
+            var = (Var *) malloc(ret -> variables_size * sizeof(Var));
+            *ret->variables = var;
+            
+            ret->literals = (Lit **) malloc(sizeof(Lit *));
+            lit = (Lit *) malloc(ret -> variables_size * 2 * sizeof(Lit));
+            *ret->literals = lit;
+            
+            ret ->clauses = (Clause**) malloc(sizeof(Clause*));
+            cls = (Clause *) malloc(ret-> clauses_size * sizeof(Clause));
+            *ret -> clauses = cls;
             
             //initialize variable
             for( int i = 0 ; i < ret-> variables_size; i++){
-                var[i].index = i+1;
+                var[i].index=i+1;
             }
             
             //initialize literals
-            int k = 1;
-            for( int j = 0; j < ret->variables_size*2; j+=2 )
+            long k = 1;
+            int i, j;
+            for(i=0, j = 0; j < ret->variables_size*2; j+=2,i++ )
             {
                 lit[j].index = k;
-                lit[j+1].index = -k;
-                lit[j].var_ptr = &var[j];
-                lit[j+1].var_ptr = &var[j+1];
-                var[j].pos_literal = &lit[j];
-                var[j].neg_literal = &lit[j+1];
+                lit[j+1].index = -(k);
+                lit[j].var_ptr = ret->variables[i];
+                lit[j+1].var_ptr = ret->variables[i];
+                var[i].pos_literal = ret->literals[j];
+                var[i].neg_literal = ret->literals[j+1];
                 k++;
             }
             continue;
         }
-        
-        //else it's the caluse
+        //else it's the clauses
         else if( !(fst_char >= 'a' && fst_char <= 'z') && num_clause < ret-> clauses_size)
-        {            
+        {
+
             //initialize clauses
             int *vals;
-            int n = get_numbers(buffer, &vals, ret->variables_size);
+            int n = get_numbers(buffer, &vals, ret->variables_size, lit);
 
-            element = (Lit*) malloc (n * sizeof(Lit*));
-            for(int i =0; i < n ; i++)
+            cls[num_clause].elements = (Lit**) malloc(n * sizeof(Lit));
+            
+            for(int i = 0; i < n ; i++)
             {
+                int x;
                 if(vals[i]<0)
                 {
-                    element[i] = lit[vals[i]+1];
+                    x =(abs(vals[i])+(abs(vals[i])-1));
+
                 }
                 else{
-                    element[i] = lit[vals[i]];
+                    x =(vals[i]-1)*2;
                 }
+                cls[num_clause].elements[i] = &lit[x];
+
+
+                
             }
-            cls[num_clause].elements  = &element;
-            num_clause++;
-            continue;
             
+            cls[num_clause].elements_size = n;
+            
+            ret->clauses[num_clause] = &cls[num_clause];
+            
+            printf("\n");
+            num_clause++;
         }
         else
         {
             continue;
         }
+        
+
     }
     fclose(fp);
-    ret -> clauses = &cls;
-    ret -> variables = &var;
+    
     return ret;
 }
 void free_sat_state(SatState* sat_state) {

@@ -91,27 +91,28 @@ struct Clause {
  ******************************************************************************/
 
 typedef struct {
-
-  Var **variables;
-  unsigned long variables_size;
-
-  Clause      **clauses;
-  unsigned long clauses_size; // indices must start at 1
-  unsigned long clauses_capacity;
-
-  Lit          **decisions;
-  unsigned long  decisions_size;
-  unsigned long  decisions_applied;
-
-  Lit          **implications;
-  unsigned long  implications_size;
-  unsigned long  implications_applied;
-
-  Clause       *assertion_clause;
-  unsigned long assertion_clause_level;
-
+    
+    Lit **literals;
+    
+    Var **variables;
+    unsigned long variables_size;
+    
+    Clause      **clauses;
+    unsigned long clauses_size; // indices must start at 1
+    unsigned long clauses_capacity;
+    
+    Lit          **decisions;
+    unsigned long  decisions_size;
+    unsigned long  decisions_applied;
+    
+    Lit          **implications;
+    unsigned long  implications_size;
+    unsigned long  implications_applied;
+    
+    Clause       *assertion_clause;
+    unsigned long assertion_clause_level;
+    
 } SatState;
-
 
 /******************************************************************************
  * API:
