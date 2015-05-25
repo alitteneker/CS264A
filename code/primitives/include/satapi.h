@@ -4,13 +4,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 /******************************************************************************
  * typedefs
  ******************************************************************************/
 
 typedef char BOOLEAN;
-
 
 /******************************************************************************
  * Basic structures
@@ -29,8 +29,8 @@ typedef struct {
 
   unsigned long index;
 
-  struct Lit *pos_literal;
-  struct Lit *neg_literal;
+  Lit *pos_literal;
+  Lit *neg_literal;
 
   Clause **used_clauses;
   long     used_clauses_size;
@@ -46,7 +46,6 @@ typedef struct {
 
 } Var;
 
-
 /******************************************************************************
  * Literals:
  * --You must represent literals using the following struct
@@ -61,7 +60,6 @@ struct Lit {
   Var *var_ptr;      // pointer to the underlying var
 
 };
-
 
 /******************************************************************************
  * Clauses:
@@ -83,7 +81,6 @@ struct Clause {
   Lit *watch_2;
 
 };
-
 
 /******************************************************************************
  * SatState:

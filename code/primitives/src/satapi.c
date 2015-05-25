@@ -127,43 +127,83 @@ BOOLEAN subsumed_clause(Clause* clause) {
 SatState* construct_sat_state(char* cnf_fname) {
   SatState *ret = NULL;;
   FILE *fp;
+  Clause **cls = NULL;
+  Lit **lit = NULL;
+  Lit **element = NULL;
+  Var **var = NULL;
+
   fp = fopen(cnf_fname, "r");
 
-  if(fp == NULL){
+  int num_clause = 0;
+
+  if(!fp){
     ret = NULL;
   }
   else{
     size_t buf = 80;
     char *buffer = malloc(buf * sizeof(char));
-    int clause_count = 0;
-    int indx = 0;
-
-    ret = malloc(sizeof(SatState)); // still need to malloc all the internals
-
-    while( getline(&buffer, &buf, fp) != -1 ) {
+    while(getline(&buffer, &buf, fp)!=-1){
        char fst_char = buffer[0];
        if( fst_char == 'c')
          continue;
-       else if( fst_char== 'p' ) {
-         ret->variables_size = (buffer[6]);
-         ret->clauses_size = clause_count = buffer[8];
-         continue;
-       }
-       else if( !(fst_char >= 'a' && fst_char <= 'z') && clause_count > 0){
-         if(indx == 0){
-           Clause cls[clause_count];
+       else if( fst_char== 'p'){
+         ret-> variables_size = buffer[6];
+         ret-> clauses_size = buffer[8];
 
+         cls = malloc(ret-> clauses_size * sizeof(Clause*));
+         lit = malloc(ret -> variables_size * 2 * sizeof(Lit*));
+         var = malloc(ret -> variables_size * sizeof(Var*));
+
+         //initialize variable
+         for( int i = 0 ; i < ret-> variables_size; i++){
+           var[i] -> index = i;
          }
+
+         //initialize literals
+         for( int i = 0; i < ret -> variables_size*2; i=+2){
+          lit[i] -> index = i;
+          lit[i+1]->index = (0-i);
+          lit[i] -> var_ptr = var[i];
+          lit[i+1] -> var_ptr = var[i];
+          var[i]-> pos_literal = lit[i];
+          var[i]-> neg_literal = lit[i+1];
+        }
+        continue;
        }
-       else
+       //else it's the caluse
+       else if( !(fst_char >= 'a' && fst_char <= 'z')){
+         //initialize clauses
+         while (num_clause < ret-> clauses_size){
+           int counter = 0;
+           for(int i = 0; i < strlen(buffer) ; i++){
+             if(buffer[i] !=' ' && buffer[i] != '-')
+               counter++;
+           }
+           element = malloc(counter * sizeof(Lit*));
+           for(int i =0, j = 0 ; i < strlen(buffer) && j < counter ; i++){
+             if(buffer[i] != ' '){
+               if(buffer[i]=='-'){
+                  element[j] = lit[i+1];
+               }
+               else{
+                 element[j] = lit[i];
+               }
+             }
+            }
+            cls[num_clause] -> elements  = element;
+            num_clause++;
+          }
+       }
+       else{
          continue;
+       }
     }
-
-
   }
+  fclose(fp);
+  ret -> clauses = cls;
+  ret -> variables = var;
   return ret;
 }
-
 void free_sat_state(SatState* sat_state) {
 
   // TODO
