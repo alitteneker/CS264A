@@ -372,13 +372,17 @@ Clause* sat_assert_clause(Clause* clause, SatState* sat_state) {
   for( index = 0; index < clause->elements_size; ++index ) {
     var = clause->elements[index]->var_ptr;
     if( var->used_clauses_capacity == var->used_clauses_size ) {
-        var->used_clauses = resize_clause_list( var->used_clauses, var->used_clauses_size, var->used_clauses_capacity+=10 );
+      var->used_clauses = resize_clause_list(
+        var->used_clauses, var->used_clauses_size, var->used_clauses_capacity+=10
+      );
     }
     var->used_clauses[ var->used_clauses_size++ ] = sat_state->assertion_clause;
   }
 
   if( sat_state->clauses_capacity == sat_state->clauses_size ) {
-    sat_state->clauses = resize_clause_list( sat_state->clauses, sat_state->clauses_size, sat_state->clauses_capacity+=10 );
+    sat_state->clauses = resize_clause_list(
+      sat_state->clauses, sat_state->clauses_size, sat_state->clauses_capacity+=10
+    );
   }
   sat_state->clauses[ sat_state->clauses_size++ ] = clause;
   sat_state->assertion_clause_count++;
