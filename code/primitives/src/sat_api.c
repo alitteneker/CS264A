@@ -130,6 +130,12 @@ Lit* sat_neg_literal(const Var* var) {
   return NULL;
 }
 
+Lit* sat_opposite_literal(const Lit* lit) {
+  if(lit == NULL)
+    return NULL;
+  return ( lit->index < 0 ) ? lit->var_ptr->pos_literal : lit->var_ptr->pos_literal;
+}
+
 //returns 1 if the literal is implied, 0 otherwise
 //a literal is implied by deciding its variable, or by inference using unit resolution
 BOOLEAN sat_implied_literal(const Lit* lit) {
@@ -373,6 +379,7 @@ Clause* sat_assert_clause(Clause* clause, SatState* sat_state) {
     sat_state->clauses = resize_clause_list( sat_state->clauses, sat_state->clauses_size, sat_state->clauses_capacity+=10 );
   }
   sat_state->clauses[ sat_state->clauses_size++ ] = clause;
+  sat_state->assertion_clause_count++;
   sat_state->assertion_clause = NULL;
   sat_state->assertion_clause_level = 0;
 
@@ -639,7 +646,7 @@ Clause* build_assertion_clause(Lit *uip, SatState *sat_state) {
       }
       if( sat_state->implications[index]->var_ptr->set_depth <= uip->var_ptr->set_depth
         && sat_state->implications[index]->var_ptr->used_depth >= uip->var_ptr->set_depth + 1 ) {
-          cut[cut_size++] = sat_state->implications[index];
+          cut[cut_size++] = sat_opposite_literal(sat_state->implications[index]);
         }
     }
   }
@@ -651,7 +658,7 @@ Clause* build_assertion_clause(Lit *uip, SatState *sat_state) {
       }
       if( sat_state->decisions[index]->var_ptr->set_depth <= uip->var_ptr->set_depth
         && sat_state->decisions[index]->var_ptr->used_depth >= uip->var_ptr->set_depth + 1 ) {
-          cut[cut_size++] = sat_state->decisions[index];
+          cut[cut_size++] = sat_opposite_literal(sat_state->decisions[index]);
         }
     }
   }
