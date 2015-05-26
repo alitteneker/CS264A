@@ -284,7 +284,7 @@ void sat_undo_decide_literal(SatState* sat_state) {
 Clause* sat_index2clause(c2dSize index, const SatState* sat_state) {
 
   if( sat_state != NULL && index < sat_state->clauses_size )
-    return sat_state->clauses[index];
+    return sat_state->clauses[index-1];
   return NULL;
 }
 
@@ -364,6 +364,8 @@ Clause* sat_assert_clause(Clause* clause, SatState* sat_state) {
   if( sat_state == NULL || clause == NULL )
     return 0;
 
+  clause->index = sat_state->clauses_size;
+  clause->watch_1 = clause->watch_2 = clause->elements[0];
   clause->needs_checking = 1;
   clause->is_subsumed = 0;
 
@@ -618,6 +620,7 @@ Lit* find_UIP(SatState* sat_state, unsigned long decision_level, unsigned long t
   }
 
   if( index < 0 ) {
+    // if our current decision level is 0, then generating
     if( decision_level > 1 )
       return sat_state->decisions[ decision_level - 2 ];
     return NULL;
