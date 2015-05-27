@@ -130,6 +130,12 @@ Lit* sat_neg_literal(const Var* var) {
   return NULL;
 }
 
+Lit* sat_opposite_literal(const Lit* lit) {
+  if(lit == NULL)
+    return NULL;
+  return ( lit->index < 0 ) ? lit->var_ptr->pos_literal : lit->var_ptr->pos_literal;
+}
+
 //returns 1 if the literal is implied, 0 otherwise
 //a literal is implied by deciding its variable, or by inference using unit resolution
 BOOLEAN sat_implied_literal(const Lit* lit) {
@@ -278,7 +284,7 @@ void sat_undo_decide_literal(SatState* sat_state) {
 Clause* sat_index2clause(c2dSize index, const SatState* sat_state) {
 
   if( sat_state != NULL && index < sat_state->clauses_size )
-    return sat_state->clauses[index];
+    return sat_state->clauses[index-1];
   return NULL;
 }
 
@@ -358,21 +364,28 @@ Clause* sat_assert_clause(Clause* clause, SatState* sat_state) {
   if( sat_state == NULL || clause == NULL )
     return 0;
 
+  clause->index = sat_state->clauses_size;
+  clause->watch_1 = clause->watch_2 = clause->elements[0];
   clause->needs_checking = 1;
   clause->is_subsumed = 0;
 
   for( index = 0; index < clause->elements_size; ++index ) {
     var = clause->elements[index]->var_ptr;
     if( var->used_clauses_capacity == var->used_clauses_size ) {
-        var->used_clauses = resize_clause_list( var->used_clauses, var->used_clauses_size, var->used_clauses_capacity+=10 );
+      var->used_clauses = resize_clause_list(
+        var->used_clauses, var->used_clauses_size, var->used_clauses_capacity+=10
+      );
     }
     var->used_clauses[ var->used_clauses_size++ ] = sat_state->assertion_clause;
   }
 
   if( sat_state->clauses_capacity == sat_state->clauses_size ) {
-    sat_state->clauses = resize_clause_list( sat_state->clauses, sat_state->clauses_size, sat_state->clauses_capacity+=10 );
+    sat_state->clauses = resize_clause_list(
+      sat_state->clauses, sat_state->clauses_size, sat_state->clauses_capacity+=10
+    );
   }
   sat_state->clauses[ sat_state->clauses_size++ ] = clause;
+  sat_state->assertion_clause_count++;
   sat_state->assertion_clause = NULL;
   sat_state->assertion_clause_level = 0;
 
@@ -722,6 +735,7 @@ Lit* find_UIP(SatState* sat_state, unsigned long decision_level, unsigned long t
   }
 
   if( index < 0 ) {
+    // if our current decision level is 0, then generating
     if( decision_level > 1 )
       return sat_state->decisions[ decision_level - 2 ];
     return NULL;
@@ -750,7 +764,7 @@ Clause* build_assertion_clause(Lit *uip, SatState *sat_state) {
       }
       if( sat_state->implications[index]->var_ptr->set_depth <= uip->var_ptr->set_depth
         && sat_state->implications[index]->var_ptr->used_depth >= uip->var_ptr->set_depth + 1 ) {
-          cut[cut_size++] = sat_state->implications[index];
+          cut[cut_size++] = sat_opposite_literal(sat_state->implications[index]);
         }
     }
   }
@@ -762,7 +776,7 @@ Clause* build_assertion_clause(Lit *uip, SatState *sat_state) {
       }
       if( sat_state->decisions[index]->var_ptr->set_depth <= uip->var_ptr->set_depth
         && sat_state->decisions[index]->var_ptr->used_depth >= uip->var_ptr->set_depth + 1 ) {
-          cut[cut_size++] = sat_state->decisions[index];
+          cut[cut_size++] = sat_opposite_literal(sat_state->decisions[index]);
         }
     }
   }
