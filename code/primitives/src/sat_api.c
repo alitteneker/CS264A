@@ -468,7 +468,7 @@ int get_numbers(const char *line, int **vars, size_t num_vars)
     return i;
 }
 
-SatState* construct_sat_state(char* cnf_fname) {
+SatState* sat_state_new(const char* cnf_fname) {
     SatState *ret;
     FILE *fp;
     Lit *decision = NULL;
