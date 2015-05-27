@@ -471,8 +471,6 @@ int get_numbers(const char *line, int **vars, size_t num_vars)
 SatState* sat_state_new(const char* cnf_fname) {
     SatState *ret;
     FILE *fp;
-    Lit *decision = NULL;
-    Lit *implication = NULL;
     
     int num_clause;
     size_t n;
@@ -523,13 +521,11 @@ SatState* sat_state_new(const char* cnf_fname) {
                 ret->clauses[i] = (Clause*)malloc(sizeof(Clause));
             }
             
-            ret ->decisions =(Lit**) malloc(sizeof(Lit*));
-            decision = (Lit*) malloc(ret->variables_size * sizeof(Lit));
-            *ret -> decisions = decision;
+            ret ->decisions =(Lit**) malloc(ret->variables_size * sizeof(Lit*));
+            ret ->decisions_size = 0;
             
-            ret ->implications =(Lit**) malloc(sizeof(Lit*));
-            implication = (Lit*) malloc(ret->variables_size * sizeof(Lit));
-            *ret -> implications = implication;
+            ret ->implications =(Lit**) malloc(ret->variables_size * sizeof(Lit*));
+            ret ->implications_size = 0;
             
             
             //initialize variable
