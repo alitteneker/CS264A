@@ -2,7 +2,7 @@ c this is a comment line
 c each comment line starts with lowercase c
 ccc one more comment line, then we will have the problem line
 p cnf 4 3
-1 -1 3 0
+1 -2 3 0
 -1 0
 -3 4 0
 cc a comment line is possible after all clauses are defined

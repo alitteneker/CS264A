@@ -11,13 +11,15 @@
  ******************************************************************************/
 
 typedef char BOOLEAN;
+<<<<<<< HEAD
 //#typedef struct Lit;
 //typedef struct Clause;
+=======
+>>>>>>> eda9e74822b7425e021337d53141f6d959f7a223
 
 /******************************************************************************
  * Basic structures
  ******************************************************************************/
-
 
 /******************************************************************************
  * Variables:
@@ -27,14 +29,18 @@ typedef char BOOLEAN;
  ******************************************************************************/
 typedef struct Lit Lit;
 typedef struct Clause Clause;
+<<<<<<< HEAD
+=======
+
+>>>>>>> eda9e74822b7425e021337d53141f6d959f7a223
 typedef struct {
 
   unsigned long index;
 
-  struct Lit *pos_literal;
-  struct Lit *neg_literal;
+  Lit *pos_literal;
+  Lit *neg_literal;
 
-  struct Clause **used_clauses;
+  Clause **used_clauses;
   long     used_clauses_size;
   long     used_clauses_capacity;
 
@@ -44,7 +50,7 @@ typedef struct {
   unsigned long set_depth;
   unsigned long used_depth;
   unsigned long path_count;
-  struct Clause *implication_clause;
+  Clause *implication_clause;
 
 } Var;
 
@@ -57,6 +63,10 @@ typedef struct {
  ******************************************************************************/
 
 struct Lit {
+<<<<<<< HEAD
+=======
+
+>>>>>>> eda9e74822b7425e021337d53141f6d959f7a223
   signed long index; // numeric sign indicates boolean sign
   Var *var_ptr;      // pointer to the underlying var
 
