@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <assert.h>
 
 /******************************************************************************
@@ -123,26 +124,29 @@ struct Clause {
  ******************************************************************************/
 
 typedef struct sat_state_t {
-
-  Var   **variables;
-  c2dSize variables_size;
-
-  Clause **clauses;
-  c2dSize  clauses_size; // indices must start at 1
-  c2dSize  clauses_capacity;
-
-  Lit   **decisions;
-  c2dSize decisions_size;
-  c2dSize decisions_applied;
-
-  Lit   **implications;
-  c2dSize implications_size;
-  c2dSize implications_applied;
-
-  Clause *assertion_clause;
-  c2dSize assertion_clause_level;
-  c2dSize assertion_clause_count;
-
+    
+    Lit **literals;
+    c2dSize literals_size;
+    
+    Var   **variables;
+    c2dSize variables_size;
+    
+    Clause **clauses;
+    c2dSize  clauses_size; // indices must start at 1
+    c2dSize  clauses_capacity;
+    
+    Lit   **decisions;
+    c2dSize decisions_size;
+    c2dSize decisions_applied;
+    
+    Lit   **implications;
+    c2dSize implications_size;
+    c2dSize implications_applied;
+    
+    Clause *assertion_clause;
+    c2dSize assertion_clause_level;
+    c2dSize assertion_clause_count;
+    
 } SatState;
 
 /******************************************************************************

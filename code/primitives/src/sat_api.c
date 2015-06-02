@@ -412,89 +412,197 @@ Clause* sat_assert_clause(Clause* clause, SatState* sat_state) {
  * SatState (sat_state_free)
  ******************************************************************************/
 
-//constructs a SatState from an input cnf file
-SatState* sat_state_new(const char* file_name) {
-
-  SatState *ret = NULL;;
-  FILE *fp;
-  Clause **cls = NULL;
-  Lit **lit = NULL;
-  Lit **element = NULL;
-  Var **var = NULL;
-
-  fp = fopen(file_name, "r");
-
-  int num_clause = 0;
-
-  if(!fp){
-    ret = NULL;
-  }
-  else{
-    size_t buf = 80;
-    char *buffer = malloc(buf * sizeof(char));
-    while(getline(&buffer, &buf, fp)!=-1){
-       char fst_char = buffer[0];
-       if( fst_char == 'c')
-         continue;
-       else if( fst_char== 'p'){
-         ret-> variables_size = buffer[6];
-         ret-> clauses_size = buffer[8];
-
-         cls = malloc(ret-> clauses_size * sizeof(Clause*));
-         lit = malloc(ret -> variables_size * 2 * sizeof(Lit*));
-         var = malloc(ret -> variables_size * sizeof(Var*));
-
-         //initialize variable
-         for( int i = 0 ; i < ret-> variables_size; i++){
-           var[i] -> index = i;
-         }
-
-         //initialize literals
-         for( int i = 0; i < ret -> variables_size*2; i=+2){
-          lit[i] -> index = i;
-          lit[i+1]->index = (0-i);
-          lit[i] -> var_ptr = var[i];
-          lit[i+1] -> var_ptr = var[i];
-          var[i]-> pos_literal = lit[i];
-          var[i]-> neg_literal = lit[i+1];
-        }
-        continue;
-       }
-       //else it's the caluse
-       else if( !(fst_char >= 'a' && fst_char <= 'z')){
-         //initialize clauses
-         while (num_clause < ret-> clauses_size){
-           int counter = 0;
-           for(int i = 0; i < strlen(buffer) ; i++){
-             if(buffer[i] !=' ' && buffer[i] != '-')
-               counter++;
-           }
-           element = malloc(counter * sizeof(Lit*));
-           for(int i =0, j = 0 ; i < strlen(buffer) && j < counter ; i++){
-             if(buffer[i] != ' '){
-               if(buffer[i]=='-'){
-                  element[j] = lit[i+1];
-               }
-               else{
-                 element[j] = lit[i];
-               }
-             }
-            }
-            cls[num_clause] -> elements  = element;
-            num_clause++;
-          }
-       }
-       else{
-         continue;
-       }
+int get_index(SatState* sat, c2dLiteral val){
+    int i;
+    for(i = 0; i < sat -> literals_size; i++){
+        if(sat->literals[i]->index == val)
+            return i;
     }
-  }
-  fclose(fp);
-  ret -> clauses = cls;
-  ret -> variables = var;
-  return ret;
+    return i;
 }
 
+int if_in_usedClauseAlready(Clause** used_clauses, c2dSize clause_index, c2dSize cls_size)
+{
+    for(int i = 0; i < cls_size; i++){
+        if(used_clauses[i]->index == clause_index)
+            return 1;
+    }
+    return 0;
+}
+int get_numbers(const char *line, int **vars, size_t num_vars)
+{
+    int i, x;
+    int *tmp;
+    const char *p, *q;
+    
+    if(vars == NULL)
+        return 0;
+
+    tmp = (int *)malloc(num_vars * sizeof(int));
+    
+    p = line;
+    q = NULL;
+
+    for(i=0; i < num_vars; i++){
+        while(*p!=0 && isspace(*p)) p++;
+        q = p;
+        while(*q!=0 && !isspace(*q)) q++;
+        while(*q!=0 && isspace(*q)) q++;
+        
+        if(p==q)
+            break;
+        
+        if(sscanf(p, "%d", &x) != 1)
+        {
+            free(tmp);
+            tmp = NULL;
+            return 0;
+        }
+        
+        if(x == 0)
+            break;
+        tmp[i] = x;
+        p = q;
+    }
+    *vars = tmp;
+    return i;
+}
+
+SatState* sat_state_new(const char* cnf_fname) {
+    SatState *ret;
+    FILE *fp;
+    
+    int num_clause;
+    size_t n;
+    char *buffer;
+    
+    // testing the file
+    if((fp=fopen(cnf_fname, "r")) == NULL)
+        return NULL;
+    
+    num_clause = 0;
+    n = 80;
+    ret = (SatState *) malloc( sizeof(SatState) );
+    memset(ret, 0x00, sizeof(SatState));
+    
+    buffer = (char *)malloc(n * sizeof(char));
+    
+    while(getline(&buffer, &n, fp) != -1)
+    {
+
+        char fst_char = buffer[0];
+        
+        if( fst_char == 'c')
+            continue;
+        
+        else if(fst_char== 'p')
+        {
+
+            if(sscanf(buffer, "p cnf %lu %lu", &ret->variables_size, &ret->clauses_size) != 2)
+                exit(EXIT_FAILURE);
+            ret->literals_size = ret->variables_size * 2;
+            
+            //allocating memories for attributes for sat_state
+            ret->variables = (Var**)malloc(ret->variables_size *sizeof(Var *));
+            for(int i = 0; i < ret->variables_size; i++)
+            {
+                ret->variables[i] = (Var*)malloc(sizeof(Var));
+            }
+            
+            ret->literals = (Lit**)malloc(ret->literals_size * sizeof(Lit *));
+            for(int i = 0; i < ret->literals_size ; i++)
+            {
+                ret->literals[i] = (Lit*)malloc(sizeof(Lit));
+            }
+            
+            ret ->clauses = (Clause**) malloc( ret-> clauses_size * sizeof(Clause*));
+            for(int i = 0; i < ret->clauses_size ; i++)
+            {
+                ret->clauses[i] = (Clause*)malloc(sizeof(Clause));
+            }
+            
+            ret ->decisions =(Lit**) malloc(ret->variables_size * sizeof(Lit*));
+            ret ->decisions_size = 0;
+            
+            ret ->implications =(Lit**) malloc(ret->variables_size * sizeof(Lit*));
+            ret ->implications_size = 0;
+            
+            
+            //initialize variable
+            for( int i = 0 ; i < ret-> variables_size; i++){
+                Clause **cls_arr;
+                
+                cls_arr = (Clause **)malloc(ret->clauses_size * sizeof(Clause*));
+                ret->variables[i]->index= i+1;
+                ret->variables[i]->used_clauses = cls_arr;
+                ret->variables[i]->used_clauses_size = 0;
+                ret->variables[i]->used_clauses_capacity = ret->clauses_size;
+            }
+            
+            //initialize literals
+            long k = 1;
+            int i, j;
+            for(i=0, j = 0; j < ret->literals_size; j+=2,i++ )
+            {
+                ret->literals[j]->index = k;
+                ret->literals[j+1]->index = -(k);
+                ret->literals[j]->var_ptr = ret->variables[i];
+                ret->literals[j+1]->var_ptr = ret->variables[i];
+                ret->variables[i]->pos_literal = ret->literals[j];
+                ret->variables[i]->neg_literal = ret->literals[j+1];
+                k++;
+            }
+            ret->literals_size = ret->variables_size*2;
+            continue;
+        }
+        //else it's the clauses
+        else if( !(fst_char >= 'a' && fst_char <= 'z') && num_clause < ret-> clauses_size)
+        {
+
+            //initialize clauses
+            int *vals;
+            int var_val;
+            Lit** element_array = NULL;
+            int n = get_numbers(buffer, &vals, ret->variables_size);
+
+            element_array = (Lit**)malloc(n*sizeof(Lit*));
+            ret->clauses[num_clause]->elements = element_array;
+            
+            for(int i = 0; i < n ; i++)
+            {
+                // assignment for literals in this clause cls[num_clause]
+                int x;
+                x = get_index(ret, vals[i]);
+                element_array[i] = ret->literals[x];
+                
+                var_val = (vals[i]<0) ? -vals[i]: vals[i];
+                var_val = var_val-1;
+                
+                //setting the used_clauses for varables that appear in the clause
+                unsigned long j = ret->variables[var_val]->used_clauses_size;
+                if(if_in_usedClauseAlready(ret->variables[var_val]->used_clauses, num_clause+1, j) == 0)
+                {
+                    //copy over all the information.
+                    ret->variables[var_val]->used_clauses[j] = ret->clauses[num_clause];
+                    ret->variables[var_val]->used_clauses_size++;
+                }
+                
+            }
+
+            ret->clauses[num_clause]->elements_size = n;
+            ret->clauses[num_clause]->index = num_clause+1;
+
+            num_clause++;
+        }
+        else
+        {
+            continue;
+        }        
+
+    }
+    fclose(fp);
+    return ret;
+}
 //frees the SatState
 void sat_state_free(SatState* sat_state) {
   c2dSize index;

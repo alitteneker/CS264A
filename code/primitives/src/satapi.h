@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <math.h>
 
 /******************************************************************************
@@ -11,15 +12,13 @@
  ******************************************************************************/
 
 typedef char BOOLEAN;
-<<<<<<< HEAD
 //#typedef struct Lit;
 //typedef struct Clause;
-=======
->>>>>>> eda9e74822b7425e021337d53141f6d959f7a223
 
 /******************************************************************************
  * Basic structures
  ******************************************************************************/
+
 
 /******************************************************************************
  * Variables:
@@ -29,18 +28,14 @@ typedef char BOOLEAN;
  ******************************************************************************/
 typedef struct Lit Lit;
 typedef struct Clause Clause;
-<<<<<<< HEAD
-=======
-
->>>>>>> eda9e74822b7425e021337d53141f6d959f7a223
 typedef struct {
 
   unsigned long index;
 
-  Lit *pos_literal;
-  Lit *neg_literal;
+  struct Lit *pos_literal;
+  struct Lit *neg_literal;
 
-  Clause **used_clauses;
+  struct Clause **used_clauses;
   long     used_clauses_size;
   long     used_clauses_capacity;
 
@@ -50,7 +45,7 @@ typedef struct {
   unsigned long set_depth;
   unsigned long used_depth;
   unsigned long path_count;
-  Clause *implication_clause;
+  struct Clause *implication_clause;
 
 } Var;
 
@@ -63,10 +58,6 @@ typedef struct {
  ******************************************************************************/
 
 struct Lit {
-<<<<<<< HEAD
-=======
-
->>>>>>> eda9e74822b7425e021337d53141f6d959f7a223
   signed long index; // numeric sign indicates boolean sign
   Var *var_ptr;      // pointer to the underlying var
 
@@ -100,27 +91,28 @@ struct Clause {
  ******************************************************************************/
 
 typedef struct {
-
-  Var **variables;
-  unsigned long variables_size;
-
-  Clause      **clauses;
-  unsigned long clauses_size; // indices must start at 1
-  unsigned long clauses_capacity;
-
-  Lit          **decisions;
-  unsigned long  decisions_size;
-  unsigned long  decisions_applied;
-
-  Lit          **implications;
-  unsigned long  implications_size;
-  unsigned long  implications_applied;
-
-  Clause       *assertion_clause;
-  unsigned long assertion_clause_level;
-
+    
+    Lit **literals;
+    
+    Var **variables;
+    unsigned long variables_size;
+    
+    Clause      **clauses;
+    unsigned long clauses_size; // indices must start at 1
+    unsigned long clauses_capacity;
+    
+    Lit          **decisions;
+    unsigned long  decisions_size;
+    unsigned long  decisions_applied;
+    
+    Lit          **implications;
+    unsigned long  implications_size;
+    unsigned long  implications_applied;
+    
+    Clause       *assertion_clause;
+    unsigned long assertion_clause_level;
+    
 } SatState;
-
 
 /******************************************************************************
  * API:
