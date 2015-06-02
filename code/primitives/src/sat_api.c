@@ -52,15 +52,14 @@ BOOLEAN sat_instantiated_var(const Var* var) {
 BOOLEAN sat_irrelevant_var(const Var* var) {
   long index;
 
-  if( var != NULL ) {
-    for(index = 0; index < var->used_clauses_size; ++index) {
-      if( var->used_clauses[index]->is_subsumed == 0 )
-        return 0;
-    }
-    return 1;
-  }
+  if( var == NULL )
+    return 0;
 
-  return 0;
+  for(index = 0; index < var->used_clauses_size; ++index) {
+    if( var->used_clauses[index]->is_subsumed == 0 && var->used_clauses[index]->was_generated == 0 )
+      return 0;
+  }
+  return 1;
 }
 
 //returns the number of variables in the cnf of sat state
@@ -175,15 +174,29 @@ BOOLEAN unapply_literal(Lit *lit, SatState* sat_state) {
   lit->var_ptr->is_set = 1;
   for( index = 0; index < lit->var_ptr->used_clauses_size; ++index ) {
     lit->var_ptr->used_clauses[index]->needs_checking = 1;
+    lit->var_ptr->used_clauses[index]->is_subsumed = 0;
   }
 
   return 1;
 }
 
-// return the decision level found
-long apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
+unsigned long calc_decision_level(Clause *clause) {
+  unsigned long decision_level, index;
 
-  long index, max_depth, max_level;
+  // calculate the maximum level in the conflict clause
+  decision_level = 1;
+  for( index = 0; index < clause->elements_size; ++index ) {
+    if( clause->elements[index]->var_ptr->decision_level > decision_level )
+      decision_level = clause->elements[index]->var_ptr->decision_level;
+  }
+
+  return decision_level;
+}
+
+// return the decision level found
+unsigned long apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
+
+  unsigned long index;
 
   if( lit == NULL || set_literal(lit) )
     return -1;
@@ -191,33 +204,15 @@ long apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
   lit->var_ptr->is_set = 1;
   lit->var_ptr->set_sign = lit->index > 0;
   lit->var_ptr->implication_clause = clause;
-
-  // determine and set the depth and level of this new variable setting variable
-  if( clause != NULL ) {
-    max_level = 1;
-    max_depth = -1;
-    for( index = 0; index < clause->elements_size; ++index ) {
-      if( clause->elements[index]->var_ptr->is_set == 0 || clause->elements[index] == lit )
-        continue;
-      if( clause->elements[index]->var_ptr->decision_level > max_level )
-        max_level = clause->elements[index]->var_ptr->decision_level;
-      if( clause->elements[index]->var_ptr->set_depth > max_depth )
-        max_depth = clause->elements[index]->var_ptr->set_depth;
-    }
-    lit->var_ptr->decision_level = max_level;
-    lit->var_ptr->set_depth = max_depth + 1;
-  }
-  else {
-    max_level = lit->var_ptr->decision_level = sat_state->decisions_size + 1;
-    max_depth = lit->var_ptr->set_depth = 0;
-  }
+  lit->var_ptr->decision_level =
+    ( clause != NULL ) ? calc_decision_level(clause) : ( sat_state->decisions_size + 2 );
 
   // flag all the clauses that use this new setting
   for( index = 0; index < lit->var_ptr->used_clauses_size; ++index )
     if( lit->var_ptr->used_clauses[index]->is_subsumed == 0 )
       lit->var_ptr->used_clauses[index]->needs_checking = 1;
 
-  return max_level;
+  return lit->var_ptr->decision_level;
 }
 
 //sets the literal to true, and then runs unit resolution
@@ -366,6 +361,7 @@ Clause* sat_assert_clause(Clause* clause, SatState* sat_state) {
 
   clause->index = sat_state->clauses_size;
   clause->watch_1 = clause->watch_2 = clause->elements[0];
+  clause->was_generated = 1;
   clause->needs_checking = 1;
   clause->is_subsumed = 0;
 
@@ -434,12 +430,12 @@ int get_numbers(const char *line, int **vars, size_t num_vars)
     int i, x;
     int *tmp;
     const char *p, *q;
-    
+
     if(vars == NULL)
         return 0;
 
     tmp = (int *)malloc(num_vars * sizeof(int));
-    
+
     p = line;
     q = NULL;
 
@@ -448,17 +444,17 @@ int get_numbers(const char *line, int **vars, size_t num_vars)
         q = p;
         while(*q!=0 && !isspace(*q)) q++;
         while(*q!=0 && isspace(*q)) q++;
-        
+
         if(p==q)
             break;
-        
+
         if(sscanf(p, "%d", &x) != 1)
         {
             free(tmp);
             tmp = NULL;
             return 0;
         }
-        
+
         if(x == 0)
             break;
         tmp[i] = x;
@@ -471,74 +467,72 @@ int get_numbers(const char *line, int **vars, size_t num_vars)
 SatState* sat_state_new(const char* cnf_fname) {
     SatState *ret;
     FILE *fp;
-    
+
     int num_clause;
     size_t n;
     char *buffer;
-    
+
     // testing the file
     if((fp=fopen(cnf_fname, "r")) == NULL)
         return NULL;
-    
+
     num_clause = 0;
     n = 80;
     ret = (SatState *) malloc( sizeof(SatState) );
     memset(ret, 0x00, sizeof(SatState));
-    
+
     buffer = (char *)malloc(n * sizeof(char));
-    
+
     while(getline(&buffer, &n, fp) != -1)
     {
 
         char fst_char = buffer[0];
-        
+
         if( fst_char == 'c')
             continue;
-        
-        else if(fst_char== 'p')
-        {
+
+        else if(fst_char== 'p') {
 
             if(sscanf(buffer, "p cnf %lu %lu", &ret->variables_size, &ret->clauses_size) != 2)
                 exit(EXIT_FAILURE);
             ret->literals_size = ret->variables_size * 2;
-            
+
             //allocating memories for attributes for sat_state
             ret->variables = (Var**)malloc(ret->variables_size *sizeof(Var *));
-            for(int i = 0; i < ret->variables_size; i++)
-            {
+            for(int i = 0; i < ret->variables_size; i++) {
                 ret->variables[i] = (Var*)malloc(sizeof(Var));
             }
-            
+
             ret->literals = (Lit**)malloc(ret->literals_size * sizeof(Lit *));
-            for(int i = 0; i < ret->literals_size ; i++)
-            {
+            for(int i = 0; i < ret->literals_size ; i++) {
                 ret->literals[i] = (Lit*)malloc(sizeof(Lit));
             }
-            
+
             ret ->clauses = (Clause**) malloc( ret-> clauses_size * sizeof(Clause*));
-            for(int i = 0; i < ret->clauses_size ; i++)
-            {
+            for(int i = 0; i < ret->clauses_size ; i++) {
                 ret->clauses[i] = (Clause*)malloc(sizeof(Clause));
+                ret->clauses[i]->is_subsumed = 0;
+                ret->clauses[i]->was_generated = 0;
             }
-            
+
             ret ->decisions =(Lit**) malloc(ret->variables_size * sizeof(Lit*));
             ret ->decisions_size = 0;
-            
+
             ret ->implications =(Lit**) malloc(ret->variables_size * sizeof(Lit*));
             ret ->implications_size = 0;
-            
-            
-            //initialize variable
+
+
+            //initialize variables
             for( int i = 0 ; i < ret-> variables_size; i++){
                 Clause **cls_arr;
-                
+
                 cls_arr = (Clause **)malloc(ret->clauses_size * sizeof(Clause*));
                 ret->variables[i]->index= i+1;
                 ret->variables[i]->used_clauses = cls_arr;
                 ret->variables[i]->used_clauses_size = 0;
                 ret->variables[i]->used_clauses_capacity = ret->clauses_size;
             }
-            
+
             //initialize literals
             long k = 1;
             int i, j;
@@ -567,17 +561,17 @@ SatState* sat_state_new(const char* cnf_fname) {
 
             element_array = (Lit**)malloc(n*sizeof(Lit*));
             ret->clauses[num_clause]->elements = element_array;
-            
+
             for(int i = 0; i < n ; i++)
             {
                 // assignment for literals in this clause cls[num_clause]
                 int x;
                 x = get_index(ret, vals[i]);
                 element_array[i] = ret->literals[x];
-                
+
                 var_val = (vals[i]<0) ? -vals[i]: vals[i];
                 var_val = var_val-1;
-                
+
                 //setting the used_clauses for varables that appear in the clause
                 unsigned long j = ret->variables[var_val]->used_clauses_size;
                 if(if_in_usedClauseAlready(ret->variables[var_val]->used_clauses, num_clause+1, j) == 0)
@@ -586,7 +580,7 @@ SatState* sat_state_new(const char* cnf_fname) {
                     ret->variables[var_val]->used_clauses[j] = ret->clauses[num_clause];
                     ret->variables[var_val]->used_clauses_size++;
                 }
-                
+
             }
 
             ret->clauses[num_clause]->elements_size = n;
@@ -597,7 +591,7 @@ SatState* sat_state_new(const char* cnf_fname) {
         else
         {
             continue;
-        }        
+        }
 
     }
     fclose(fp);
@@ -657,153 +651,105 @@ void sat_state_free(SatState* sat_state) {
  *
  * Yet, the first decided literal must have 2 as its decision level
  ******************************************************************************/
-unsigned long recurse_paths(Lit *lit, unsigned long level) {
-  unsigned long paths, index;
-
-  if( lit->var_ptr->implication_clause == NULL ) {
-    paths = 1;
-  }
-  else {
-    if( lit->var_ptr->implication_clause->elements_size == 1 )
-      paths = 1;
-    else {
-      paths = 0;
-      for( index = 0; index < lit->var_ptr->implication_clause->elements_size; ++index ) {
-        if( lit->var_ptr->implication_clause->elements[index] == lit )
-          continue;
-        paths += recurse_paths( lit->var_ptr->implication_clause->elements[index], level );
-        if( lit->var_ptr->set_depth > lit->var_ptr->implication_clause->elements[index]->var_ptr->used_depth )
-          lit->var_ptr->implication_clause->elements[index]->var_ptr->used_depth = lit->var_ptr->set_depth;
-      }
-    }
-  }
-  lit->var_ptr->path_count += paths;
-
-  if( lit->var_ptr->decision_level == level )
-    return paths;
-  return 0;
-}
-
-unsigned long calc_decision_level(Clause *clause) {
-  unsigned long decision_level, index;
-
-  // calculate the maximum level in the conflict clause
-  decision_level = 0;
-  for( index = 0; index < clause->elements_size; ++index ) {
-    if( decision_level < clause->elements[index]->var_ptr->decision_level )
-      decision_level = clause->elements[index]->var_ptr->decision_level;
-  }
-
-  return decision_level;
-}
-
-unsigned long calc_total_paths(Clause *clause, unsigned long decision_level, SatState *sat_state) {
-  unsigned long total_paths, index;
-
-  // clear out any old data in any of the implications and decisions
-  for( index = 0; index < sat_state->implications_size; ++index ) {
-    sat_state->implications[index]->var_ptr->path_count = 0;
-    sat_state->implications[index]->var_ptr->used_depth = 0;
-  }
-  for( index = 0; index < sat_state->decisions_size; ++index ) {
-    sat_state->decisions[index]->var_ptr->path_count = 0;
-    sat_state->decisions[index]->var_ptr->used_depth = 0;
-  }
-
-  // calculate the total number of same-level paths from the conflict clause to the end
-  total_paths = 0;
-  for( index = 0; index < clause->elements_size; ++index ) {
-    total_paths += recurse_paths( clause->elements[index], decision_level );
-  }
-
-  return total_paths;
-}
-
-Lit* find_UIP(SatState* sat_state, unsigned long decision_level, unsigned long total_paths) {
-  long index;
-
-  for(index = sat_state->implications_size-1; index >= 0; --index ) {
-    if( sat_state->implications[index]->var_ptr->decision_level < decision_level ) {
-      index = -1;
-      break;
-    }
-    if( sat_state->implications[index]->var_ptr->path_count == total_paths )
-      break;
-  }
-
-  if( index < 0 ) {
-    // if our current decision level is 0, then generating
-    if( decision_level > 1 )
-      return sat_state->decisions[ decision_level - 2 ];
-    return NULL;
-  }
-  return sat_state->implications[index];
-}
 
 // this will actually build the new clause
-Clause* build_assertion_clause(Lit *uip, SatState *sat_state) {
-  unsigned long index, cut_size;
+void generate_assertion_clause(Clause *conflict_clause, SatState *sat_state) {
+  unsigned long index, i, list_size, real_list_size, count, decision_level;
   long assertion_level;
-  Lit **cut;
+  Lit **list;
   Clause *clause;
+  BOOLEAN finished;
 
   // this would indicate we have no uip (conflict through only unit clause implications)
-  if( uip == NULL )
-    return NULL;
+  decision_level = calc_decision_level(conflict_clause);
+  if( decision_level <= 2 )
+    return;
 
-  cut = malloc( sat_state->variables_size * sizeof(Lit*) );
-  cut_size = 0;
-  for( index = 0; index < sat_state->implications_size; ++index ) {
-    if( sat_state->implications[index]->var_ptr->path_count > 0 ) {
-      if( sat_state->implications[index]->var_ptr->decision_level < uip->var_ptr->decision_level
-        && sat_state->implications[index]->var_ptr->decision_level > assertion_level ) {
-        assertion_level = sat_state->implications[index]->var_ptr->decision_level;
+  list = malloc( sat_state->variables_size * sizeof(Lit*) );
+  list_size = real_list_size = 0;
+
+  // seed the list with the literals in the assertion level
+  for( index = 0; index < conflict_clause->elements_size; ++index ) {
+    if( conflict_clause->elements[index]->var_ptr->assertion_list == 1 )
+      continue;
+    list[list_size] = conflict_clause->elements[index];
+    list[list_size]->var_ptr->assertion_use = 1;
+    list[list_size]->var_ptr->assertion_list = 1;
+    ++list_size;
+  }
+  real_list_size = list_size;
+
+  // main loop here: find the fuip and generate the list of literals at the same time
+  finished = 0;
+  while( !finished ) {
+
+    count = 0;
+    for( index = 0; index < list_size; ++index ) {
+      if( list[index]->var_ptr->decision_level == decision_level && list[index]->var_ptr->assertion_use ) {
+        ++count;
       }
-      if( sat_state->implications[index]->var_ptr->set_depth <= uip->var_ptr->set_depth
-        && sat_state->implications[index]->var_ptr->used_depth >= uip->var_ptr->set_depth + 1 ) {
-          cut[cut_size++] = sat_opposite_literal(sat_state->implications[index]);
+      // is there anything else to do here?
+    }
+
+    if( count == 1 ) {
+      // we're done!
+      finished = 1;
+    }
+    else {
+
+      for( index = 0; index < list_size; ++index ) {
+        // we have more than one thing at the current decision level: therefore we have not yet found the uip
+        // find the first one which is not a decision, and add the literals which implied it to our list
+        if( list[index]->var_ptr->decision_level == decision_level
+          && list[index]->var_ptr->assertion_use
+          && list[index]->var_ptr->implication_clause != NULL
+        ) {
+
+          list[index]->var_ptr->assertion_use = 0;
+          --real_list_size;
+          for( i = 0; i < list[index]->var_ptr->implication_clause->elements_size; ++i ) {
+            if( list[index]->var_ptr->implication_clause->elements[i]->var_ptr->assertion_list == 1 )
+              continue;
+
+            list[list_size] = list[index]->var_ptr->implication_clause->elements[i];
+            list[list_size]->var_ptr->assertion_use = 1;
+            list[list_size]->var_ptr->assertion_list = 1;
+            ++list_size;
+            ++real_list_size;
+          }
+
+          break;
         }
+      }
     }
   }
-  for( index = 0; index < sat_state->decisions_size; ++index ) {
-    if( sat_state->decisions[index]->var_ptr->path_count > 0 ) {
-      if( sat_state->decisions[index]->var_ptr->decision_level < uip->var_ptr->decision_level
-        && sat_state->decisions[index]->var_ptr->decision_level > assertion_level ) {
-        assertion_level = sat_state->decisions[index]->var_ptr->decision_level;
-      }
-      if( sat_state->decisions[index]->var_ptr->set_depth <= uip->var_ptr->set_depth
-        && sat_state->decisions[index]->var_ptr->used_depth >= uip->var_ptr->set_depth + 1 ) {
-          cut[cut_size++] = sat_opposite_literal(sat_state->decisions[index]);
-        }
-    }
-  }
 
+  // build the assertion clause itself, whilst simultaneously calculating the assertion level
   clause = malloc(sizeof(Clause));
-  clause->elements = malloc( cut_size * sizeof(Lit*) );
-  clause->elements_size = cut_size;
-  for( index = 0; index < cut_size; ++index ) {
-    clause->elements[index] = cut[index];
+  clause->elements = malloc( real_list_size * sizeof(Lit*) );
+  clause->elements_size = real_list_size;
+
+  assertion_level = 0;
+  i = 0;
+  for( index = 0; index < list_size; ++index ) {
+    if( list[index]->var_ptr->assertion_use ) {
+
+      clause->elements[i++] = sat_opposite_literal(list[index]);
+
+      if(  list[index]->var_ptr->decision_level != decision_level
+        && list[index]->var_ptr->decision_level  > assertion_level
+      ) {
+        assertion_level = list[index]->var_ptr->decision_level;
+      }
+    }
+    list[index]->var_ptr->assertion_use = 0;
+    list[index]->var_ptr->assertion_list = 0;
   }
-  free(cut);
+
+  free(list);
 
   sat_state->assertion_clause = clause;
   sat_state->assertion_clause_level = assertion_level;
-
-  return clause;
-}
-
-// this method runs all relevant calculations for assertion clause generation
-// THIS METHOD CALLS THE METHOD ABOVE, only cal this method directly
-void generate_assertion_clause(Clause *clause, SatState* sat_state) {
-  unsigned long total_paths, decision_level;
-  Lit *uip;
-
-  decision_level = calc_decision_level(clause);
-  total_paths = calc_total_paths(clause, decision_level, sat_state);
-  uip = find_UIP(sat_state, decision_level, total_paths);
-  build_assertion_clause(uip, sat_state);
-
-  return;
 }
 
 BOOLEAN check_clause( Clause* clause, SatState *sat_state ) {
