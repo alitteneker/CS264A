@@ -56,7 +56,7 @@ BOOLEAN sat_irrelevant_var(const Var* var) {
     return 0;
 
   for(index = 0; index < var->used_clauses_size; ++index) {
-    if( var->used_clauses[index]->is_subsumed == 0 && var->used_clauses[index]->was_generated == 0 )
+    if( !var->used_clauses[index]->is_subsumed && !var->used_clauses[index]->was_generated )
       return 0;
   }
   return 1;
@@ -153,14 +153,14 @@ BOOLEAN set_literal(Lit* lit) {
 
 BOOLEAN asserted_literal(Lit* lit) {
 
-  if( lit != NULL && lit->var_ptr->is_set == 1 && lit->var_ptr->set_sign == ( lit->index > 0 ) )
+  if( lit != NULL && lit->var_ptr->is_set && lit->var_ptr->set_sign == ( lit->index > 0 ) )
     return 1;
   return 0;
 }
 
 BOOLEAN resolved_literal(Lit* lit) {
 
-  if( lit != NULL && lit->var_ptr->is_set == 1 && lit->var_ptr->set_sign == ( lit->index < 0 ) )
+  if( lit != NULL && lit->var_ptr->is_set && lit->var_ptr->set_sign == ( lit->index < 0 ) )
     return 1;
   return 0;
 }
@@ -209,7 +209,7 @@ unsigned long apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
 
   // flag all the clauses that use this new setting
   for( index = 0; index < lit->var_ptr->used_clauses_size; ++index )
-    if( lit->var_ptr->used_clauses[index]->is_subsumed == 0 )
+    if( !lit->var_ptr->used_clauses[index]->is_subsumed )
       lit->var_ptr->used_clauses[index]->needs_checking = 1;
 
   return lit->var_ptr->decision_level;
@@ -226,6 +226,8 @@ Clause* sat_decide_literal(Lit* lit, SatState* sat_state) {
     || set_literal(lit) || sat_state->decisions_size == sat_state->variables_size )
       return NULL;
 
+  printf("decide literal index %lu \n", lit->index);
+
   sat_state->decisions[ sat_state->decisions_size++ ] = lit;
   apply_literal(lit, NULL, sat_state);
   return sat_unit_resolution(sat_state) ? NULL : sat_state->assertion_clause;
@@ -241,7 +243,8 @@ BOOLEAN imply_literal(Lit *lit, Clause *clause, SatState *sat_state) {
   level = apply_literal(lit, clause, sat_state);
   if( sat_state->implications_size == 0
     || level >= sat_state->implications[sat_state->implications_size]->var_ptr->decision_level ) {
-      sat_state->implications[ sat_state->implications_size++ ] = lit;
+      sat_state->implications[ sat_state->implications_size ] = lit;
+      ++sat_state->implications_size;
   }
   else {
     // in this case, we have at least one out of sequence implication
@@ -515,11 +518,13 @@ SatState* sat_state_new(const char* cnf_fname) {
                 ret->clauses[i]->was_generated = 0;
             }
 
-            ret ->decisions =(Lit**) malloc(ret->variables_size * sizeof(Lit*));
-            ret ->decisions_size = 0;
+            ret->decisions =(Lit**) malloc(ret->variables_size * sizeof(Lit*));
+            ret->decisions_size = 0;
+            ret->decisions_applied = 0;
 
-            ret ->implications =(Lit**) malloc(ret->variables_size * sizeof(Lit*));
-            ret ->implications_size = 0;
+            ret->implications =(Lit**) malloc(ret->variables_size * sizeof(Lit*));
+            ret->implications_size = 0;
+            ret->implications_applied = 0;
 
 
             //initialize variables
@@ -536,22 +541,20 @@ SatState* sat_state_new(const char* cnf_fname) {
             //initialize literals
             long k = 1;
             int i, j;
-            for(i=0, j = 0; j < ret->literals_size; j+=2,i++ )
-            {
-                ret->literals[j]->index = k;
-                ret->literals[j+1]->index = -(k);
-                ret->literals[j]->var_ptr = ret->variables[i];
-                ret->literals[j+1]->var_ptr = ret->variables[i];
+            for(i=0, j = 0; j < ret->literals_size; j+=2,i++ ) {
+                ret->literals[j]->index   = k;                 ret->literals[j+1]->index   = -(k);
+                ret->literals[j]->var_ptr = ret->variables[i]; ret->literals[j+1]->var_ptr = ret->variables[i];
+
                 ret->variables[i]->pos_literal = ret->literals[j];
                 ret->variables[i]->neg_literal = ret->literals[j+1];
+
                 k++;
             }
             ret->literals_size = ret->variables_size*2;
             continue;
         }
         //else it's the clauses
-        else if( !(fst_char >= 'a' && fst_char <= 'z') && num_clause < ret-> clauses_size)
-        {
+        else if( !(fst_char >= 'a' && fst_char <= 'z') && num_clause < ret-> clauses_size) {
 
             //initialize clauses
             int *vals;
@@ -561,9 +564,10 @@ SatState* sat_state_new(const char* cnf_fname) {
 
             element_array = (Lit**)malloc(n*sizeof(Lit*));
             ret->clauses[num_clause]->elements = element_array;
+            ret->clauses[num_clause]->elements_size = n;
+            ret->clauses[num_clause]->index = num_clause+1;
 
-            for(int i = 0; i < n ; i++)
-            {
+            for(int i = 0; i < n ; i++) {
                 // assignment for literals in this clause cls[num_clause]
                 int x;
                 x = get_index(ret, vals[i]);
@@ -574,8 +578,7 @@ SatState* sat_state_new(const char* cnf_fname) {
 
                 //setting the used_clauses for varables that appear in the clause
                 unsigned long j = ret->variables[var_val]->used_clauses_size;
-                if(if_in_usedClauseAlready(ret->variables[var_val]->used_clauses, num_clause+1, j) == 0)
-                {
+                if( !if_in_usedClauseAlready(ret->variables[var_val]->used_clauses, num_clause+1, j) ) {
                     //copy over all the information.
                     ret->variables[var_val]->used_clauses[j] = ret->clauses[num_clause];
                     ret->variables[var_val]->used_clauses_size++;
@@ -583,18 +586,19 @@ SatState* sat_state_new(const char* cnf_fname) {
 
             }
 
-            ret->clauses[num_clause]->elements_size = n;
-            ret->clauses[num_clause]->index = num_clause+1;
+            // initialize the watches with a usable value
+            ret->clauses[num_clause]->watch_1 = ret->clauses[num_clause]->watch_2 = element_array[0];
 
             num_clause++;
         }
-        else
-        {
+        else {
             continue;
         }
 
     }
     fclose(fp);
+
+    sat_unit_resolution(ret);
     return ret;
 }
 //frees the SatState
@@ -670,7 +674,7 @@ void generate_assertion_clause(Clause *conflict_clause, SatState *sat_state) {
 
   // seed the list with the literals in the assertion level
   for( index = 0; index < conflict_clause->elements_size; ++index ) {
-    if( conflict_clause->elements[index]->var_ptr->assertion_list == 1 )
+    if( conflict_clause->elements[index]->var_ptr->assertion_list )
       continue;
     list[list_size] = conflict_clause->elements[index];
     list[list_size]->var_ptr->assertion_use = 1;
@@ -708,7 +712,7 @@ void generate_assertion_clause(Clause *conflict_clause, SatState *sat_state) {
           list[index]->var_ptr->assertion_use = 0;
           --real_list_size;
           for( i = 0; i < list[index]->var_ptr->implication_clause->elements_size; ++i ) {
-            if( list[index]->var_ptr->implication_clause->elements[i]->var_ptr->assertion_list == 1 )
+            if( list[index]->var_ptr->implication_clause->elements[i]->var_ptr->assertion_list )
               continue;
 
             list[list_size] = list[index]->var_ptr->implication_clause->elements[i];
@@ -769,7 +773,7 @@ BOOLEAN check_clause( Clause* clause, SatState *sat_state ) {
       clause->is_subsumed = 1;
       return 1;
     }
-    if( set_literal(clause->elements[index]) == 0 ) {
+    if( !set_literal(clause->elements[index]) ) {
       if( !found_lit_1 ) {
         lit_1 = clause->elements[index];
         found_lit_1 = 1;
@@ -781,7 +785,7 @@ BOOLEAN check_clause( Clause* clause, SatState *sat_state ) {
     }
   }
 
-  if( !found_lit_1 && !found_lit_2 ) {
+  if( !found_lit_1 ) {
     // if we have found a contradiction
     clause->is_subsumed = 0;
     return 0;
@@ -802,13 +806,16 @@ BOOLEAN check_clause( Clause* clause, SatState *sat_state ) {
 }
 
 BOOLEAN check_literal(Lit *lit, SatState* sat_state) {
-  long index;
+  unsigned long index;
+  BOOLEAN check;
 
   for( index = 0; index < lit->var_ptr->used_clauses_size; ++index ) {
-    if( lit->var_ptr->used_clauses[index]->needs_checking == 1 ) {
-      lit->var_ptr->used_clauses[index]->needs_checking = 1;
-      if( check_clause( lit->var_ptr->used_clauses[index], sat_state ) == 0 ) {
+    if( lit->var_ptr->used_clauses[index]->needs_checking ) {
+      lit->var_ptr->used_clauses[index]->needs_checking = 0;
+      check = check_clause( lit->var_ptr->used_clauses[index], sat_state );
+      if( !check ) {
         generate_assertion_clause(lit->var_ptr->used_clauses[index], sat_state);
+        printf("Found sat contradiction %ld %lu.\n", lit->index, lit->var_ptr->used_clauses[index]->index);
         return 0;
       }
     }
@@ -819,14 +826,26 @@ BOOLEAN check_literal(Lit *lit, SatState* sat_state) {
 //applies unit resolution to the cnf of sat state
 //returns 1 if unit resolution succeeds, 0 if it finds a contradiction
 BOOLEAN sat_unit_resolution(SatState* sat_state) {
-
+  unsigned long index;
+  for( index = 0; index < sat_state->clauses_size; ++index ) {
+    if( sat_state->clauses[index]->needs_checking && sat_state->clauses[index]->elements_size == 1 ) {
+      printf("Found unit clause: %d %lu \n", sat_state->clauses[index]->needs_checking, sat_state->clauses[index]->elements_size);
+      check_clause(sat_state->clauses[index], sat_state);
+    }
+  }
   while( sat_state->decisions_applied < sat_state->decisions_size ) {
-    if( !check_literal( sat_state->decisions[ sat_state->decisions_applied++ ], sat_state ) )
+    printf("Checking decision %lu < %lu \n", sat_state->decisions_applied, sat_state->decisions_size );
+    if( !check_literal( sat_state->decisions[ sat_state->decisions_applied ], sat_state ) ) {
       return 0;
+    }
+    ++sat_state->decisions_applied;
   }
   while( sat_state->implications_applied < sat_state->implications_size ) {
-    if( !check_literal( sat_state->implications[ sat_state->implications_applied++ ], sat_state ) )
+    printf("Checking implication %lu < %lu \n", sat_state->implications_applied, sat_state->implications_size );
+    if( !check_literal( sat_state->implications[ sat_state->implications_applied ], sat_state ) ) {
       return 0;
+    }
+    ++sat_state->implications_applied;
   }
   return 1;
 }
@@ -862,8 +881,10 @@ void sat_undo_unit_resolution(SatState* sat_state) {
 //it is used to decide whether the sat state is at the right decision level for adding clause.
 BOOLEAN sat_at_assertion_level(const Clause* clause, const SatState* sat_state) {
 
-  if( sat_state != NULL )
+  if( sat_state != NULL ) {
+    printf("at assertion level: %lu %lu \n", sat_state->assertion_clause_level, sat_state->decisions_size);
     return sat_state->assertion_clause_level == sat_state->decisions_size + 1;
+  }
   return 0;
 }
 
