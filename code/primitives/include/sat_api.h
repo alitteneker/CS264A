@@ -104,8 +104,10 @@ struct Lit {
 struct Clause {
     
     BOOLEAN is_subsumed;
-    BOOLEAN was_generated;
     BOOLEAN needs_checking;
+    
+    BOOLEAN was_generated;
+    c2dSize assertion_level;
     
     c2dSize index;
     Lit **elements;
@@ -138,14 +140,13 @@ typedef struct sat_state_t {
     
     Lit   **decisions;
     c2dSize decisions_size;
-    c2dSize decisions_applied;
+    c2dSize decisions_checked;
     
     Lit   **implications;
     c2dSize implications_size;
-    c2dSize implications_applied;
+    c2dSize implications_checked;
     
     Clause *assertion_clause;
-    c2dSize assertion_clause_level;
     c2dSize assertion_clause_count;
     
 } SatState;

@@ -227,9 +227,7 @@ Clause* sat_decide_literal(Lit* lit, SatState* sat_state) {
     if( sat_state == NULL || lit == NULL
        || set_literal(lit) || sat_state->decisions_size == sat_state->variables_size )
         return NULL;
-    
-    printf("Decide literal index %ld \n", lit->index);
-    
+
     apply_literal(lit, NULL, sat_state);
     sat_state->decisions[ sat_state->decisions_size++ ] = lit;
     return sat_unit_resolution(sat_state) ? NULL : sat_state->assertion_clause;
@@ -240,9 +238,7 @@ BOOLEAN imply_literal(Lit *lit, Clause *clause, SatState *sat_state) {
     if( sat_state == NULL || lit == NULL
        || set_literal(lit) || sat_state->implications_size == sat_state->variables_size )
         return 0;
-    
-    printf("Imply literal index %ld \n", lit->index);
-    
+
     apply_literal(lit, clause, sat_state);
     sat_state->implications[ sat_state->implications_size ] = lit;
     ++sat_state->implications_size;
@@ -266,7 +262,7 @@ void sat_undo_decide_literal(SatState* sat_state) {
     decision_level = decision->var_ptr->decision_level;
     for( index = 0; index < sat_state->implications_size
         && sat_state->implications[index]->var_ptr->decision_level < decision_level; ++index );
-    sat_state->implications_applied = index;
+    sat_state->implications_checked = index;
     
     // unapply any implications at the current decision level, and reorder any out of order implications
     for( index2 = index; index2 < sat_state->implications_size; ++index2 ) {
@@ -280,15 +276,9 @@ void sat_undo_decide_literal(SatState* sat_state) {
     }
     sat_state->implications_size = index;
     unapply_literal(decision, sat_state);
-
-    for( index = 0; index < sat_state->clauses_size; ++index ) {
-        if( sat_state->clauses[index]->needs_checking ) {
-            check_clause( sat_state->clauses[index], sat_state );
-        }
-    }
     
-    if( sat_state->decisions_applied == sat_state->decisions_size )
-        --sat_state->decisions_applied;
+    if( sat_state->decisions_checked == sat_state->decisions_size )
+        --sat_state->decisions_checked;
     --sat_state->decisions_size;
 }
 
@@ -377,30 +367,35 @@ Clause* sat_assert_clause(Clause* clause, SatState* sat_state) {
     unsigned long index;
     Var* var;
     
-    if( sat_state == NULL || clause == NULL )
+    if( sat_state == NULL || clause == NULL ) {
+        printf("Passed invalid assertion clause.\n");
         return 0;
+    }
+    printf("Asserting clause.\n");
     
     clause->index = sat_state->clauses_size;
-    clause->watch_1 = clause->watch_2 = clause->elements[0];
-    clause->was_generated = 1;
+    clause->watch_1 = clause->elements[0];
+    clause->watch_2 = clause->elements[0];
     clause->needs_checking = 1;
     clause->is_subsumed = 0;
     
     for( index = 0; index < clause->elements_size; ++index ) {
         var = clause->elements[index]->var_ptr;
         if( var->used_clauses_capacity == var->used_clauses_size ) {
-            var->used_clauses = resize_clause_list( var->used_clauses, var->used_clauses_size, var->used_clauses_capacity+=10 );
+            var->used_clauses = resize_clause_list( var->used_clauses, var->used_clauses_size, var->used_clauses_capacity + 10 );
+            var->used_clauses_capacity += 10;
         }
         var->used_clauses[ var->used_clauses_size++ ] = sat_state->assertion_clause;
     }
     
     if( sat_state->clauses_capacity == sat_state->clauses_size ) {
-        sat_state->clauses = resize_clause_list( sat_state->clauses, sat_state->clauses_size, sat_state->clauses_capacity+=10 );
+        sat_state->clauses = resize_clause_list( sat_state->clauses, sat_state->clauses_size, sat_state->clauses_capacity + 10 );
+        sat_state->clauses_capacity += 10;
     }
-    sat_state->clauses[ sat_state->clauses_size++ ] = clause;
-    sat_state->assertion_clause_count++;
+    sat_state->clauses[ sat_state->clauses_size ] = clause;
+    ++sat_state->clauses_size;
+    ++sat_state->assertion_clause_count;
     sat_state->assertion_clause = NULL;
-    sat_state->assertion_clause_level = 0;
     
     return sat_unit_resolution(sat_state) ? NULL : sat_state->assertion_clause;
 }
@@ -525,7 +520,8 @@ SatState* sat_state_new(const char* cnf_fname) {
                 ret->literals[i] = (Lit*)malloc(sizeof(Lit));
             }
             
-            ret ->clauses = (Clause**) malloc( ret-> clauses_size * sizeof(Clause*));
+            ret->clauses_capacity = ret->clauses_size + 10;
+            ret->clauses = (Clause**) malloc( ret->clauses_capacity * sizeof(Clause*));
             for(int i = 0; i < ret->clauses_size ; i++) {
                 ret->clauses[i] = (Clause*)malloc(sizeof(Clause));
                 ret->clauses[i]->is_subsumed = 0;
@@ -534,11 +530,11 @@ SatState* sat_state_new(const char* cnf_fname) {
             
             ret->decisions =(Lit**) malloc(ret->variables_size * sizeof(Lit*));
             ret->decisions_size = 0;
-            ret->decisions_applied = 0;
+            ret->decisions_checked = 0;
             
             ret->implications =(Lit**) malloc(ret->variables_size * sizeof(Lit*));
             ret->implications_size = 0;
-            ret->implications_applied = 0;
+            ret->implications_checked = 0;
             
             
             //initialize variables
@@ -682,11 +678,14 @@ void generate_assertion_clause(Clause *conflict_clause, SatState *sat_state) {
     Clause *clause;
     BOOLEAN finished;
     
-    // this would indicate we have no uip (conflict through only unit clause implications)
+    // this would indicate we have a truly unsat result (conflict through only unit clause implications)
     decision_level = calc_decision_level(conflict_clause);
     printf("Generating assertion clause %lu \n", decision_level);
-    if( decision_level == 1 )
+    if( decision_level == 1 ) {
+        clause->assertion_level = 0;
+        sat_state->assertion_clause = clause;
         return;
+    }
     
     list = malloc( sat_state->variables_size * sizeof(Lit*) );
     list_size = 0;
@@ -765,8 +764,9 @@ void generate_assertion_clause(Clause *conflict_clause, SatState *sat_state) {
     
     free(list);
     
+    clause->assertion_level = assertion_level;
+    clause->was_generated = 1;
     sat_state->assertion_clause = clause;
-    sat_state->assertion_clause_level = assertion_level;
 }
 
 BOOLEAN check_clause( Clause* clause, SatState *sat_state ) {
@@ -801,9 +801,9 @@ BOOLEAN check_clause( Clause* clause, SatState *sat_state ) {
     
     if( !found_lit_1 ) {
         // if we have found a contradiction
+        printf("Found sat contradiction %lu \n", clause->index);
         clause->is_subsumed = 0;
         generate_assertion_clause(clause, sat_state);
-        printf("Found sat contradiction %lu \n", clause->index);
         return 0;
     }
     else if( found_lit_1 && !found_lit_2 ) {
@@ -838,25 +838,22 @@ BOOLEAN sat_unit_resolution(SatState* sat_state) {
     unsigned long index;
     for( index = 0; index < sat_state->clauses_size; ++index ) {
         if( sat_state->clauses[index]->needs_checking ) {
-            printf("Checking clause %lu(%lu) \n", sat_state->clauses[index]->index, sat_state->clauses[index]->elements_size);
             if( !check_clause(sat_state->clauses[index], sat_state) ) {
                 return 0;
             }
         }
     }
-    while( sat_state->decisions_applied < sat_state->decisions_size ) {
-        printf("Checking decision %lu < %lu \n", sat_state->decisions_applied, sat_state->decisions_size );
-        if( !check_literal( sat_state->decisions[ sat_state->decisions_applied ], sat_state ) ) {
+    while( sat_state->decisions_checked < sat_state->decisions_size ) {
+        if( !check_literal( sat_state->decisions[ sat_state->decisions_checked ], sat_state ) ) {
             return 0;
         }
-        ++sat_state->decisions_applied;
+        ++sat_state->decisions_checked;
     }
-    while( sat_state->implications_applied < sat_state->implications_size ) {
-        printf("Checking implication %lu < %lu \n", sat_state->implications_applied, sat_state->implications_size );
-        if( !check_literal( sat_state->implications[ sat_state->implications_applied ], sat_state ) ) {
+    while( sat_state->implications_checked < sat_state->implications_size ) {
+        if( !check_literal( sat_state->implications[ sat_state->implications_checked ], sat_state ) ) {
             return 0;
         }
-        ++sat_state->implications_applied;
+        ++sat_state->implications_checked;
     }
     return 1;
 }
@@ -871,28 +868,26 @@ void sat_undo_unit_resolution(SatState* sat_state) {
         unapply_literal(sat_state->implications[index], sat_state);
     }
     sat_state->implications_size = 0;
-    sat_state->implications_applied = 0;
+    sat_state->implications_checked = 0;
 
     for( index = 0; index < sat_state->decisions_size; ++index ) {
         unapply_literal(sat_state->decisions[index], sat_state);
     }
     sat_state->decisions_size = 0;
-    sat_state->implications_applied = 0;
+    sat_state->implications_checked = 0;
 }
 
-//returns 1 if the decision level of the sat state equals to the assertion level of clause,
-//0 otherwise
+//returns 1 if the decision level of the sat state equals to the assertion level of clause, 0 otherwise
 //
 //this function is called after sat_decide_literal() or sat_assert_clause() returns clause.
 //it is used to decide whether the sat state is at the right decision level for adding clause.
 BOOLEAN sat_at_assertion_level(const Clause* clause, const SatState* sat_state) {
     
-    if( sat_state != NULL && sat_state->assertion_clause == clause ) {
-        printf("at assertion level: %lu %lu \n", sat_state->assertion_clause_level, sat_state->decisions_size);
-        return sat_state->assertion_clause_level == sat_state->decisions_size + 1;
+    if( sat_state != NULL && clause != NULL && clause->was_generated ) {
+        return clause->assertion_level == sat_state->decisions_size + 1;
     }
     else {
-        printf("Ruh roh . . .\n");
+        printf("at_assertion_level: Passed invalid assertion clause.\n");
     }
     return 0;
 }
