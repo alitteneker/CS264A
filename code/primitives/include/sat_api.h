@@ -54,26 +54,26 @@ typedef struct Lit Lit;
 typedef struct Clause Clause;
 
 typedef struct {
-
-  c2dSize index;
-
-  Lit *pos_literal;
-  Lit *neg_literal;
-
-  Clause **used_clauses;
-  c2dSize  used_clauses_size;
-  c2dSize  used_clauses_capacity;
-
-  BOOLEAN is_set;          // whether or not this variable has been set
-  BOOLEAN set_sign;        // sign of the set variable
-  c2dSize decision_level;  // level at which this is literal was decided (or implied)
-  Clause *implication_clause;
-
-  BOOLEAN assertion_use;
-  BOOLEAN assertion_list;
-
-  BOOLEAN mark; //THIS FIELD MUST STAY AS IS
-
+    
+    c2dSize index;
+    
+    Lit *pos_literal;
+    Lit *neg_literal;
+    
+    Clause **used_clauses;
+    c2dSize  used_clauses_size;
+    c2dSize  used_clauses_capacity;
+    
+    BOOLEAN is_set;          // whether or not this variable has been set
+    BOOLEAN set_sign;        // sign of the set variable
+    c2dSize decision_level;  // level at which this is literal was decided (or implied)
+    Clause *implication_clause;
+    
+    BOOLEAN assertion_use;
+    BOOLEAN assertion_list;
+    
+    BOOLEAN mark; //THIS FIELD MUST STAY AS IS
+    
 } Var;
 
 /******************************************************************************
@@ -85,10 +85,10 @@ typedef struct {
  ******************************************************************************/
 
 struct Lit {
-
-  c2dLiteral index; // numeric sign indicates boolean sign
-  Var *var_ptr;     // pointer to the underlying var
-
+    
+    c2dLiteral index; // numeric sign indicates boolean sign
+    Var *var_ptr;     // pointer to the underlying var
+    
 };
 
 /******************************************************************************
@@ -102,20 +102,20 @@ struct Lit {
  ******************************************************************************/
 
 struct Clause {
-
-  BOOLEAN is_subsumed;
-  BOOLEAN was_generated;
-  BOOLEAN needs_checking;
-
-  c2dSize index;
-  Lit **elements;
-  c2dSize elements_size;
-
-  Lit *watch_1;
-  Lit *watch_2;
-
-  BOOLEAN mark; //THIS FIELD MUST STAY AS IS
-
+    
+    BOOLEAN is_subsumed;
+    BOOLEAN was_generated;
+    BOOLEAN needs_checking;
+    
+    c2dSize index;
+    Lit **elements;
+    c2dSize elements_size;
+    
+    Lit *watch_1;
+    Lit *watch_2;
+    
+    BOOLEAN mark; //THIS FIELD MUST STAY AS IS
+    
 };
 
 /******************************************************************************
@@ -125,29 +125,29 @@ struct Clause {
  ******************************************************************************/
 
 typedef struct sat_state_t {
-
+    
     Lit **literals;
     c2dSize literals_size;
-
+    
     Var   **variables;
     c2dSize variables_size;
-
+    
     Clause **clauses;
     c2dSize  clauses_size; // indices must start at 1
     c2dSize  clauses_capacity;
-
+    
     Lit   **decisions;
     c2dSize decisions_size;
     c2dSize decisions_applied;
-
+    
     Lit   **implications;
     c2dSize implications_size;
     c2dSize implications_applied;
-
+    
     Clause *assertion_clause;
     c2dSize assertion_clause_level;
     c2dSize assertion_clause_count;
-
+    
 } SatState;
 
 /******************************************************************************
