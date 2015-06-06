@@ -559,7 +559,7 @@ SatState* sat_state_new(const char* cnf_fname) {
                 ret->literals[i] = (Lit*)malloc(sizeof(Lit));
             }
             
-            ret->clauses_capacity = ret->clauses_size * 2;
+            ret->clauses_capacity = ret->clauses_size * 4;
             ret->clauses          = (Clause**) malloc( ret->clauses_capacity * sizeof(Clause*) );
             ret->clauses_to_check = (Clause**) malloc( ret->clauses_capacity * sizeof(Clause*) );
             ret->clauses_to_check_start = 0;
@@ -580,8 +580,10 @@ SatState* sat_state_new(const char* cnf_fname) {
             for( int i = 0 ; i < ret-> variables_size; i++){
                 Clause **cls_arr;
                 
-                cls_arr = (Clause **)malloc(ret->clauses_size * sizeof(Clause*));
-                ret->variables[i]->index= i+1;
+                cls_arr = (Clause **)malloc( 2 * ret->clauses_size * sizeof(Clause*) );
+                ret->variables[i]->index = i + 1;
+                ret->variables[i]->mark  = 0;
+                ret->variables[i]->assertion_list = ret->variables[i]->assertion_use = 0;
                 ret->variables[i]->used_clauses = cls_arr;
                 ret->variables[i]->used_clauses_size = 0;
                 ret->variables[i]->used_clauses_capacity = ret->clauses_size;
@@ -612,6 +614,7 @@ SatState* sat_state_new(const char* cnf_fname) {
             int n = get_numbers(buffer, &vals, ret->variables_size);
             
             element_array = (Lit**) malloc( n * sizeof(Lit*) );
+            ret->clauses[num_clause]->mark           = 0;
             ret->clauses[num_clause]->is_subsumed    = 0;
             ret->clauses[num_clause]->was_generated  = 0;
             ret->clauses[num_clause]->needs_checking = 1;
@@ -652,8 +655,9 @@ SatState* sat_state_new(const char* cnf_fname) {
     for( unsigned long index = 0; index < ret->clauses_size; ++index ) {
         if( ret->clauses[index]->needs_checking ) {
             if( !check_clause(ret->clauses[index], ret) ) {
-                printf("Found contradiction with no decisions.");
-                return 0;
+                printf("Found contradiction on construction.");
+                mark_check_clause(ret->clauses[index], ret);
+                return ret;
             }
         }
     }
