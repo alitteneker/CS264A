@@ -137,14 +137,16 @@ typedef struct sat_state_t {
     Clause **clauses;
     c2dSize  clauses_size; // indices must start at 1
     c2dSize  clauses_capacity;
+
+    Clause **clauses_to_check;
+    c2dSize  clauses_to_check_end;
+    c2dSize  clauses_to_check_start;
     
     Lit   **decisions;
     c2dSize decisions_size;
-    c2dSize decisions_checked;
     
     Lit   **implications;
     c2dSize implications_size;
-    c2dSize implications_checked;
     
     Clause *assertion_clause;
     c2dSize assertion_clause_count;
