@@ -153,7 +153,7 @@ Lit* sat_resolved_iteral( const Lit* lit ) {
 BOOLEAN sat_implied_literal(const Lit* lit) {
     
     if( lit != NULL )
-        return lit->var_ptr->is_set;
+        return lit->var_ptr->is_set && ( ( lit->index > 0 ) == ( lit->var_ptr->set_sign == 1 ) );
     return 0;
 }
 
@@ -352,7 +352,7 @@ BOOLEAN sat_subsumed_clause(const Clause* clause) {
 c2dSize sat_clause_count(const SatState* sat_state) {
     
     if( sat_state != NULL )
-        return sat_state->clauses_size;
+        return sat_state->clauses_size - sat_state->assertion_clause_count;
     return 0;
 }
 
