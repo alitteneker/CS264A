@@ -65,8 +65,9 @@ BOOLEAN sat_irrelevant_var(const Var* var) {
 //returns the number of variables in the cnf of sat state
 c2dSize sat_var_count(const SatState* sat_state) {
     
-    if( sat_state != NULL )
+    if( sat_state != NULL ) {
         return sat_state->variables_size;
+    }
     return 0;
 }
 
@@ -74,8 +75,13 @@ c2dSize sat_var_count(const SatState* sat_state) {
 //a variable is mentioned by a clause if one of its literals appears in the clause
 c2dSize sat_var_occurences(const Var* var) {
     
-    if( var != NULL )
-        return var->used_clauses_size;
+    if( var != NULL ) {
+        unsigned long count = 0;
+        for( unsigned long i = 0; i < var->used_clauses_size; ++i )
+            if( !var->used_clauses[i]->was_generated )
+                ++count;
+        return count;
+    }
     return 0;
 }
 
@@ -205,37 +211,61 @@ BOOLEAN mark_check_clause(Clause* clause, SatState *sat_state) {
 // return the decision level found
 void apply_literal(Lit* lit, Clause* clause, SatState* sat_state) {
     
-    unsigned long index;
-    
     if( lit == NULL || set_literal(lit) )
         return;
     
-    lit->var_ptr->set_sign = lit->index > 0;
-    lit->var_ptr->implication_clause = clause;
-    lit->var_ptr->decision_level =
+    Var *var = lit->var_ptr;
+    BOOLEAN sign = var->set_sign = lit->index > 0;
+    var->implication_clause = clause;
+    var->decision_level =
         ( clause != NULL ) ? calc_decision_level(clause) : ( sat_state->decisions_size + 2 );
+    lit->var_ptr->is_set = 1;
     
     // flag all the clauses that use this new setting
-    for( index = 0; index < lit->var_ptr->used_clauses_size; ++index ) {
-        mark_check_clause(lit->var_ptr->used_clauses[index], sat_state);
+    unsigned long index;
+    for( index = 0; index < var->pos_literal->used_clauses_size; ++index ) {
+        if( var->pos_literal->used_clauses[index]->is_subsumed )
+            continue;
+        if( sign == 1 )
+            var->pos_literal->used_clauses[index]->is_subsumed = 1;
+        else
+            mark_check_clause(var->pos_literal->used_clauses[index], sat_state);
     }
-    
-    lit->var_ptr->is_set = 1;
+    for( index = 0; index < var->neg_literal->used_clauses_size; ++index ) {
+        if( var->neg_literal->used_clauses[index]->is_subsumed )
+            continue;
+        if( sign == 0 )
+            var->neg_literal->used_clauses[index]->is_subsumed = 1;
+        else
+            mark_check_clause(var->neg_literal->used_clauses[index], sat_state);
+    }
 }
 
 BOOLEAN unapply_literal(Lit *lit, SatState* sat_state) {
-    unsigned long index;
-    BOOLEAN asserted;
     
     if( lit == NULL || !set_literal(lit) )
         return 0;
     
-    asserted = asserted_literal(lit);
-    lit->var_ptr->is_set = 0;
-    for( index = 0; index < lit->var_ptr->used_clauses_size; ++index ) {
-        if( asserted )
-            lit->var_ptr->used_clauses[index]->is_subsumed = 0;
-        mark_check_clause(lit->var_ptr->used_clauses[index], sat_state);
+    unsigned long index;
+    Var *var = lit->var_ptr;
+    BOOLEAN sign = var->set_sign;
+    var->is_set = 0;
+    
+    if( sign == 1 ) {
+        for( index = 0; index < var->pos_literal->used_clauses_size; ++index ) {
+            if( var->pos_literal->used_clauses[index]->is_subsumed ) {
+                var->pos_literal->used_clauses[index]->is_subsumed = 0;
+                mark_check_clause(var->pos_literal->used_clauses[index], sat_state);
+            }
+        }
+    }
+    else {
+        for( index = 0; index < var->neg_literal->used_clauses_size; ++index ) {
+            if( var->neg_literal->used_clauses[index]->is_subsumed ) {
+                var->neg_literal->used_clauses[index]->is_subsumed = 0;
+                mark_check_clause(var->neg_literal->used_clauses[index], sat_state);
+            }
+        }
     }
     
     return 1;
@@ -394,6 +424,7 @@ Clause** resize_clause_list(Clause** original, c2dSize original_start, c2dSize o
 Clause* sat_assert_clause(Clause* clause, SatState* sat_state) {
     unsigned long index;
     Var* var;
+    Lit* lit;
     
     if( sat_state == NULL || clause == NULL ) {
         return 0;
@@ -406,12 +437,21 @@ Clause* sat_assert_clause(Clause* clause, SatState* sat_state) {
     clause->is_subsumed = 0;
     
     for( index = 0; index < clause->elements_size; ++index ) {
-        var = clause->elements[index]->var_ptr;
+        
+        lit = clause->elements[index];
+        var = lit->var_ptr;
+        
+        if( lit->used_clauses_capacity == lit->used_clauses_size ) {
+            lit->used_clauses = resize_clause_list( lit->used_clauses, 0, lit->used_clauses_size, lit->used_clauses_capacity, lit->used_clauses_capacity * 2 );
+            lit->used_clauses_capacity *= 2;
+        }
+        lit->used_clauses[ lit->used_clauses_size++ ] = clause;
+        
         if( var->used_clauses_capacity == var->used_clauses_size ) {
             var->used_clauses = resize_clause_list( var->used_clauses, 0, var->used_clauses_size, var->used_clauses_capacity, var->used_clauses_capacity * 2 );
             var->used_clauses_capacity *= 2;
         }
-        var->used_clauses[ var->used_clauses_size++ ] = sat_state->assertion_clause;
+        var->used_clauses[ var->used_clauses_size++ ] = clause;
     }
     
     if( sat_state->clauses_capacity == sat_state->clauses_size ) {
@@ -430,7 +470,10 @@ Clause* sat_assert_clause(Clause* clause, SatState* sat_state) {
     ++sat_state->clauses_size;
 
     ++sat_state->assertion_clause_count;
-    sat_state->assertion_clause = NULL;
+    if( clause == sat_state->assertion_clause )
+        sat_state->assertion_clause = NULL;
+    else
+        printf("Trying to assert a clause we did not generate.");
     
     if( !check_clause(clause, sat_state) || !sat_unit_resolution(sat_state) )
         return sat_state->assertion_clause;
@@ -458,33 +501,22 @@ Clause* sat_assert_clause(Clause* clause, SatState* sat_state) {
  * SatState (sat_state_free)
  ******************************************************************************/
 
-int get_index(SatState* sat, c2dLiteral val){
-    int i;
-    for(i = 0; i < sat-> literals_size; i++){
-        if(sat->literals[i]->index == val)
-            return i;
-    }
-    return i;
-}
-
-int if_in_usedClauseAlready(Clause** used_clauses, c2dSize clause_index, c2dSize cls_size)
-{
-    for(int i = 0; i < cls_size; i++){
-        if(used_clauses[i]->index == clause_index)
+BOOLEAN in_used_clause(Clause** used_clauses, c2dSize clause_index, c2dSize cls_size) {
+    for( unsigned long i = 0; i < cls_size; i++ ) {
+        if( used_clauses[i]->index == clause_index )
             return 1;
     }
     return 0;
 }
-int get_numbers(const char *line, int **vars, size_t num_vars)
-{
-    int i, x;
-    int *tmp;
+long get_numbers(const char *line, long **vars, size_t num_vars) {
+    long i, x;
+    long *tmp;
     const char *p, *q;
     
     if(vars == NULL)
         return 0;
     
-    tmp = (int *)malloc(num_vars * sizeof(int));
+    tmp = (long*)malloc(num_vars * sizeof(long));
     
     p = line;
     q = NULL;
@@ -498,7 +530,7 @@ int get_numbers(const char *line, int **vars, size_t num_vars)
         if(p==q)
             break;
         
-        if(sscanf(p, "%d", &x) != 1) {
+        if(sscanf(p, "%ld", &x) != 1) {
             free(tmp);
             tmp = NULL;
             return 0;
@@ -520,6 +552,7 @@ SatState* sat_state_new(const char* cnf_fname) {
     int num_clause;
     size_t n;
     char *buffer;
+    unsigned long i;
     
     // testing the file
     if((fp=fopen(cnf_fname, "r")) == NULL)
@@ -534,8 +567,8 @@ SatState* sat_state_new(const char* cnf_fname) {
     
     while(getline(&buffer, &n, fp) != -1) {
         
-        int i = 0;
         char fst_char = buffer[0];
+        i = 0;
         while( fst_char == ' ' )
             fst_char = buffer[++i];
 
@@ -555,7 +588,7 @@ SatState* sat_state_new(const char* cnf_fname) {
             }
             
             ret->literals = (Lit**)malloc(ret->literals_size * sizeof(Lit *));
-            for(int i = 0; i < ret->literals_size ; i++) {
+            for(unsigned long i = 0; i < ret->literals_size ; i++) {
                 ret->literals[i] = (Lit*)malloc(sizeof(Lit));
             }
             
@@ -578,25 +611,28 @@ SatState* sat_state_new(const char* cnf_fname) {
             
             //initialize variables
             for( int i = 0 ; i < ret-> variables_size; i++){
-                Clause **cls_arr;
-                
-                cls_arr = (Clause **)malloc( 2 * ret->clauses_size * sizeof(Clause*) );
                 ret->variables[i]->index = i + 1;
                 ret->variables[i]->mark  = 0;
                 ret->variables[i]->assertion_list = ret->variables[i]->assertion_use = 0;
-                ret->variables[i]->used_clauses = cls_arr;
+                ret->variables[i]->used_clauses = (Clause **)malloc( 2 * ret->clauses_size * sizeof(Clause*) );
+                ret->variables[i]->used_clauses_capacity = 2*ret->clauses_size;
                 ret->variables[i]->used_clauses_size = 0;
-                ret->variables[i]->used_clauses_capacity = ret->clauses_size;
             }
             
             //initialize literals
-            long k = 1;
-            int i, j;
+            long k = 1, j;
             for(i=0, j = 0; j < ret->literals_size; j+=2,i++ ) {
                 ret->literals[j]->index   = k;                 ret->literals[j+1]->index   = -(k);
                 ret->literals[j]->var_ptr = ret->variables[i]; ret->literals[j+1]->var_ptr = ret->variables[i];
                 
+                ret->literals[ j ]->used_clauses_size = 0;
+                ret->literals[ j ]->used_clauses_capacity = 2 * ret->clauses_size;
+                ret->literals[ j ]->used_clauses = (Clause **)malloc( ret->literals[j]->used_clauses_capacity * sizeof(Clause*) );
                 ret->variables[i]->pos_literal = ret->literals[j];
+                
+                ret->literals[j+1]->used_clauses_size = 0;
+                ret->literals[j+1]->used_clauses_capacity = 2 * ret->clauses_size;
+                ret->literals[j+1]->used_clauses = (Clause **)malloc( ret->literals[j+1]->used_clauses_capacity * sizeof(Clause*) );
                 ret->variables[i]->neg_literal = ret->literals[j+1];
                 
                 k++;
@@ -608,37 +644,32 @@ SatState* sat_state_new(const char* cnf_fname) {
         else if( !(fst_char >= 'a' && fst_char <= 'z') && num_clause < ret->clauses_size) {
             
             //initialize clauses
-            int *vals;
-            int var_val;
+            long *vals;
             Lit** element_array = NULL;
-            int n = get_numbers(buffer, &vals, ret->variables_size);
+            long n = get_numbers(buffer, &vals, ret->variables_size);
             
             element_array = (Lit**) malloc( n * sizeof(Lit*) );
             ret->clauses[num_clause]->mark           = 0;
             ret->clauses[num_clause]->is_subsumed    = 0;
             ret->clauses[num_clause]->was_generated  = 0;
-            ret->clauses[num_clause]->needs_checking = 1;
+            ret->clauses[num_clause]->needs_checking = 0;
             ret->clauses[num_clause]->elements       = element_array;
             ret->clauses[num_clause]->elements_size  = n;
             ret->clauses[num_clause]->index          = num_clause + 1;
             
-            for(int i = 0; i < n ; i++) {
+            for( i = 0; i < n; ++i ) {
                 // assignment for literals in this clause cls[num_clause]
-                int x;
-                x = get_index(ret, vals[i]);
-                element_array[i] = ret->literals[x];
+                element_array[i] = vals[i] > 0 ? ret->variables[ vals[i]-1 ]->pos_literal : ret->variables[ -vals[i] - 1 ]->neg_literal;
                 
-                var_val = (vals[i]<0) ? -vals[i]: vals[i];
-                var_val = var_val-1;
-                
-                //setting the used_clauses for varables that appear in the clause
-                unsigned long j = ret->variables[var_val]->used_clauses_size;
-                if( !if_in_usedClauseAlready(ret->variables[var_val]->used_clauses, num_clause+1, j) ) {
-                    //copy over all the information.
-                    ret->variables[var_val]->used_clauses[j] = ret->clauses[num_clause];
-                    ret->variables[var_val]->used_clauses_size++;
+                //setting the used_clauses for variables that appear in the clause
+                if( !in_used_clause(element_array[i]->var_ptr->used_clauses, num_clause+1, element_array[i]->var_ptr->used_clauses_size) ) {
+                    element_array[i]->var_ptr->used_clauses[element_array[i]->var_ptr->used_clauses_size] = ret->clauses[num_clause];
+                    ++element_array[i]->var_ptr->used_clauses_size;
                 }
-                
+                if( !in_used_clause(element_array[i]->used_clauses, num_clause+1, element_array[i]->used_clauses_size) ) {
+                    element_array[i]->used_clauses[element_array[i]->used_clauses_size] = ret->clauses[num_clause];
+                    ++element_array[i]->used_clauses_size;
+                }
             }
             
             // initialize the watches with a usable value
@@ -652,14 +683,8 @@ SatState* sat_state_new(const char* cnf_fname) {
     }
     fclose(fp);
     
-    for( unsigned long index = 0; index < ret->clauses_size; ++index ) {
-        if( ret->clauses[index]->needs_checking ) {
-            if( !check_clause(ret->clauses[index], ret) ) {
-                printf("Found contradiction on construction.");
-                mark_check_clause(ret->clauses[index], ret);
-                return ret;
-            }
-        }
+    for( i= 0; i < ret->clauses_size; ++i ) {
+        mark_check_clause(ret->clauses[i], ret);
     }
     return ret;
 }
@@ -678,7 +703,9 @@ void sat_state_free(SatState* sat_state) {
     free(sat_state->clauses_to_check);
     
     for( index = 0; index < sat_state->variables_size; ++index ) {
+        free(sat_state->variables[index]->pos_literal->used_clauses);
         free(sat_state->variables[index]->pos_literal);
+        free(sat_state->variables[index]->neg_literal->used_clauses);
         free(sat_state->variables[index]->neg_literal);
         free(sat_state->variables[index]->used_clauses);
         free(sat_state->variables[index]);
@@ -824,9 +851,10 @@ BOOLEAN check_clause( Clause* clause, SatState *sat_state ) {
     
     // if both watches are still free, then just return
     clause->needs_checking = 0;
+    if( clause->is_subsumed )
+        return 1;
     if( !set_literal( clause->watch_1 ) && !set_literal( clause->watch_2 ) && clause->watch_1 != clause->watch_2 ) {
-        if( clause->is_subsumed )
-            clause->is_subsumed = 0;
+        clause->is_subsumed = 0;
         return 1;
     }
     

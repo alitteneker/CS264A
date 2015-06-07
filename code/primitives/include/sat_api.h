@@ -89,6 +89,10 @@ struct Lit {
     c2dLiteral index; // numeric sign indicates boolean sign
     Var *var_ptr;     // pointer to the underlying var
     
+    Clause **used_clauses;
+    c2dSize  used_clauses_size;
+    c2dSize  used_clauses_capacity;
+    
 };
 
 /******************************************************************************
