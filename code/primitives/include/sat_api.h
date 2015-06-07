@@ -60,6 +60,9 @@ typedef struct {
     Lit *pos_literal;
     Lit *neg_literal;
     
+    Lit**   implications;
+    c2dSize implications_size;
+    
     Clause **used_clauses;
     c2dSize  used_clauses_size;
     c2dSize  used_clauses_capacity;
@@ -148,9 +151,6 @@ typedef struct sat_state_t {
     
     Lit   **decisions;
     c2dSize decisions_size;
-    
-    Lit   **implications;
-    c2dSize implications_size;
     
     Clause *assertion_clause;
     c2dSize assertion_clause_count;
