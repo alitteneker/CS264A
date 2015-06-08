@@ -751,7 +751,6 @@ void generate_assertion_clause(Clause *conflict_clause, SatState *sat_state) {
     // this would indicate we have a truly unsat result (conflict through only unit clause implications)
     decision_level = calc_decision_level(conflict_clause);
     if( decision_level == 1 ) {
-        printf("------Found base contradiction.------\n");
         conflict_clause->assertion_level = 0;
         sat_state->assertion_clause = conflict_clause;
         return;
